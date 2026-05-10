@@ -7,29 +7,13 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from urllib.parse import quote
 import pandas as pd
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.base import MIMEBase
-from email import encoders
-from datetime import datetime
 import time
 
-now = datetime.now()
-currentDate = now.strftime("%d/%m/%Y")
+searchKeyword = "Python"
+searchLocation = "Warszawa"
+daysBack = 30
 
-# Please modify these variables
-searchKeyword = "?"
-searchLocation = "?"
-senderAddress = "?"
-senderKey = "?"
-receiverAddress = "?"
-
-# How many days back to search (1 = last 24h, 3 = last 3 days, 30 = last month)
-daysBack = 1
-
-# Set up Chrome (cross-platform: Windows / macOS / Linux)
 chromeOptions = Options()
-chromeOptions.add_experimental_option("detach", True)
 chromeOptions.add_experimental_option("excludeSwitches", ["enable-automation"])
 chromeOptions.add_experimental_option("useAutomationExtension", False)
 chromeOptions.add_argument("--disable-blink-features=AutomationControlled")
@@ -41,31 +25,38 @@ driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
     "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
 })
 
-# Navigate directly to search results
 kwEncoded = quote(searchKeyword)
 locEncoded = quote(searchLocation)
 startUrl = f"https://www.pracuj.pl/praca/{kwEncoded};kw/{locEncoded};wp?rd={daysBack}"
+print(f"URL: {startUrl}")
 driver.get(startUrl)
 time.sleep(3)
 
-# Accept cookies if present
 try:
     WebDriverWait(driver, 10).until(
         EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Akceptuj wszystkie')]"))
     ).click()
     time.sleep(2)
+    print("Cookies zaakceptowane.")
 except Exception:
-    pass
+    print("Brak cookies popup.")
 
 jobOffersList = []
+page = 1
 
-# Collect offers from every page
 while True:
-    WebDriverWait(driver, 15).until(
-        EC.presence_of_element_located((By.CSS_SELECTOR, "[data-test='default-offer']"))
-    )
+    print(f"\n--- Strona {page} ---")
+    try:
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "[data-test='default-offer']"))
+        )
+    except Exception as e:
+        print(f"Brak ofert na stronie: {e}")
+        break
 
     offers = driver.find_elements(By.CSS_SELECTOR, "[data-test='default-offer']")
+    print(f"Ofert na stronie: {len(offers)}")
+
     for offer in offers:
         try:
             try:
@@ -75,17 +66,14 @@ while True:
             title = offer.find_element(By.CSS_SELECTOR, "[data-test='offer-title']").text.strip()
             company = offer.find_element(By.CSS_SELECTOR, "[data-test='text-company-name']").text.strip()
             link = linkEl.get_attribute("href")
-
             try:
                 region = offer.find_element(By.CSS_SELECTOR, "[data-test='text-region']").text.strip()
             except Exception:
                 region = ""
-
             try:
                 salary = offer.find_element(By.CSS_SELECTOR, "[data-test='offer-salary']").text.strip()
             except Exception:
                 salary = ""
-
             jobOffersList.append({
                 "job title": title,
                 "company name": company,
@@ -93,40 +81,32 @@ while True:
                 "salary": salary,
                 "link": link,
             })
-        except Exception:
+        except Exception as e:
+            print(f"  Błąd przy parsowaniu: {e}")
             continue
 
-    # Go to next page or stop
     try:
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(1)
         nextBtn = driver.find_element(By.CSS_SELECTOR, "[data-test='bottom-pagination-button-next']")
         driver.execute_script("arguments[0].click();", nextBtn)
-        time.sleep(2)
+        page += 1
+        time.sleep(3)
+        if page > 3:
+            print("Zatrzymano na stronie 3 (test).")
+            break
     except Exception:
+        print("Ostatnia strona.")
         break
 
-# Export to Excel
-df = pd.DataFrame(jobOffersList)
-df.to_excel("jobOffers.xlsx", index=False)
+print(f"\n=== WYNIKI ===")
+print(f"Zebrano ofert łącznie: {len(jobOffersList)}")
 
-# Build and send email
-message = MIMEMultipart()
-message["From"] = senderAddress
-message["To"] = receiverAddress
-message["Subject"] = f"{searchKeyword} pracuj.pl - {searchLocation} - najnowsze oferty pracy! {currentDate}"
-
-attachment = MIMEBase("application", "octet-stream")
-attachment.set_payload(open("jobOffers.xlsx", "rb").read())
-encoders.encode_base64(attachment)
-attachment.add_header("Content-Disposition", 'attachment; filename="jobOffers.xlsx"')
-message.attach(attachment)
-
-session = smtplib.SMTP("smtp.gmail.com", 587)
-session.starttls()
-session.login(senderAddress, senderKey)
-session.sendmail(senderAddress, receiverAddress, message.as_string())
-session.quit()
-print(f"Mail sent to {receiverAddress}")
+if jobOffersList:
+    df = pd.DataFrame(jobOffersList)
+    df.to_excel("jobOffers.xlsx", index=False)
+    print("Zapisano do jobOffers.xlsx")
+    print(df[["job title", "company name", "salary"]].head(10).to_string())
 
 driver.quit()
+print("\nTest zakończony.")
