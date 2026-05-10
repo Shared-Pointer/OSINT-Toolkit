@@ -5,17 +5,14 @@ with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page()
     
-    # Dodaj User-Agent aby uniknąć blokady
     page.set_extra_http_headers({
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
     })
     
     page.goto("https://www.knf.gov.pl/dla_konsumenta/ostrzezenia_publiczne")
     
-    # Czekanie na załadowanie strony
     page.wait_for_load_state("networkidle")
     
-    # Pobranie wszystkich tabel z klasą warning-list-table
     warning_tables = page.query_selector_all("table.warning-list-table")
     
     data = []
@@ -40,10 +37,8 @@ with sync_playwright() as p:
     
     browser.close()
 
-# Wyjście jako JSON
 print(json.dumps(data, ensure_ascii=False, indent=2))
 
-# Zapisz do pliku JSON
 with open('knfList.json', 'w', encoding='utf-8') as f:
     json.dump(data, f, ensure_ascii=False, indent=2)
 print("Data saved to warnings.json")
