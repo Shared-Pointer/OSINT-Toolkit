@@ -1,5 +1,6 @@
 import html
 import re
+import os
 from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import pandas as pd
@@ -11,6 +12,10 @@ import base64
 BASE_URL = "https://decyzje.uokik.gov.pl/bp/dec_prez.nsf"
 DDG_HTML = "https://html.duckduckgo.com/html/"
 BING_HTML = "https://www.bing.com/search"
+
+
+def _log(msg: str):
+    print(f"[uokik] {msg}")
 
 
 def _dedupe(results):
@@ -179,7 +184,9 @@ def _form_payload(form, query: str):
 
 
 def _search_site(session: requests.Session, query: str):
+    _log(f"SEARCH_SITE query={query}")
     base_response = session.get(BASE_URL, timeout=30)
+    _log(f"BASE STATUS {base_response.status_code} URL {base_response.url}")
     base_response.raise_for_status()
     base_response.encoding = base_response.apparent_encoding or base_response.encoding
 
@@ -195,6 +202,7 @@ def _search_site(session: requests.Session, query: str):
     targets = search_forms or [None]
 
     for variant in _normalize_query(query):
+        _log(f"VARIANT {variant}")
         for form in targets:
             if form is None:
                 endpoints = [
@@ -204,9 +212,11 @@ def _search_site(session: requests.Session, query: str):
                 ]
                 for endpoint, params in endpoints:
                     response = session.get(endpoint, params=params, timeout=30)
+                    _log(f"STATUS {response.status_code} URL {response.url}")
                     response.raise_for_status()
                     response.encoding = response.apparent_encoding or response.encoding
                     results = _extract_uokik_results(response.text, response.url)
+                    _log(f"RESULTS {len(results)}")
                     if results:
                         return results
             else:
@@ -219,10 +229,12 @@ def _search_site(session: requests.Session, query: str):
                     if method == "post"
                     else session.get(action, params=payload, timeout=30)
                 )
+                _log(f"STATUS {response.status_code} URL {response.url}")
                 response.raise_for_status()
                 response.encoding = response.apparent_encoding or response.encoding
 
                 results = _extract_uokik_results(response.text, response.url)
+                _log(f"RESULTS {len(results)}")
                 if results:
                     return results
 
@@ -251,17 +263,22 @@ def _search_queries(query: str):
 
 def _safe_get(session: requests.Session, url: str, **kwargs):
     try:
+        _log(f"GET {url} params={kwargs.get('params')}")
         response = session.get(url, **kwargs)
+        _log(f"STATUS {response.status_code} URL {response.url}")
         if response.status_code in (403, 429):
+            _log("BLOCKED (403/429)")
             return None
         response.raise_for_status()
         response.encoding = response.apparent_encoding or response.encoding
         return response
-    except requests.RequestException:
+    except requests.RequestException as e:
+        _log(f"ERROR {e}")
         return None
 
 
 def _search_duckduckgo(session: requests.Session, query: str):
+    _log(f"SEARCH_DDG query={query}")
     allowed = ("decyzje.uokik.gov.pl", "uokik.gov.pl")
 
     ddg_headers = {
@@ -272,23 +289,19 @@ def _search_duckduckgo(session: requests.Session, query: str):
     }
 
     for ddg_query in _search_queries(query):
+        _log(f"DDG QUERY {ddg_query}")
         response = _safe_get(session, DDG_HTML, params={"q": ddg_query}, headers=ddg_headers, timeout=30)
         if not response:
             continue
-
-        results = _extract_search_engine_results(
-            response.text,
-            response.url,
-            allowed,
-            engine="duckduckgo",
-        )
+        results = _extract_search_engine_results(response.text, response.url, allowed, engine="duckduckgo")
+        _log(f"DDG RESULTS {len(results)}")
         if results:
             return results
-
     return []
 
 
 def _search_bing(session: requests.Session, query: str):
+    _log(f"SEARCH_BING query={query}")
     allowed = ("decyzje.uokik.gov.pl", "uokik.gov.pl")
 
     bing_headers = {
@@ -299,25 +312,31 @@ def _search_bing(session: requests.Session, query: str):
     }
 
     for bing_query in _search_queries(query):
+        _log(f"BING QUERY {bing_query}")
         response = _safe_get(session, BING_HTML, params={"q": bing_query}, headers=bing_headers, timeout=30)
         if not response:
             continue
-
-        results = _extract_search_engine_results(
-            response.text,
-            response.url,
-            allowed,
-            engine="bing",
-        )
+        results = _extract_search_engine_results(response.text, response.url, allowed, engine="bing")
+        _log(f"BING RESULTS {len(results)}")
         if results:
             return results
-
     return []
 
 
+def _extract_readview_entries(text: str, base_url: str):
+    results = []
+    for href in re.findall(r'href="([^"]*OpenDocument[^"]*)"', text, flags=re.IGNORECASE):
+        full_url = urljoin(base_url, href)
+        results.append({"title": full_url, "url": full_url})
+    return _dedupe(results)
+
+
 def _search_latest(session: requests.Session):
+    _log("SEARCH_LATEST")
     # Try to list newest decisions without a query
     endpoints = [
+        f"{BASE_URL}/SearchView?ReadViewEntries&Count=50",
+        f"{BASE_URL}/SearchView?ReadViewEntries&Start=1&Count=50",
         f"{BASE_URL}/SearchView?OpenView",
         f"{BASE_URL}/SearchView?OpenView&Count=50",
         f"{BASE_URL}/SearchView?OpenView&Start=1&Count=50",
@@ -334,7 +353,13 @@ def _search_latest(session: requests.Session):
             response = _safe_get(session, url, timeout=30)
             if not response:
                 continue
+            if "ReadViewEntries" in url:
+                results = _extract_readview_entries(response.text, response.url)
+                _log(f"READVIEW RESULTS {len(results)}")
+                if results:
+                    return results
             results = _extract_uokik_results(response.text, response.url, relaxed=True)
+            _log(f"LATEST RESULTS {len(results)}")
             if results:
                 return results
 
@@ -364,6 +389,40 @@ def _with_params(url: str, params: str) -> str:
     return f"{url}{'&' if '?' in url else '?'}{params}"
 
 
+def _search_api(session: requests.Session, query: str):
+    api_url = os.getenv("UOKIK_API_URL", "").strip()
+    if not api_url:
+        return []
+
+    headers = {}
+    token = os.getenv("UOKIK_API_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    _log(f"SEARCH_API url={api_url} query={query}")
+    response = _safe_get(session, api_url, params={"q": query}, headers=headers, timeout=30)
+    if not response:
+        return []
+
+    try:
+        payload = response.json()
+    except ValueError:
+        _log("API ERROR: invalid JSON")
+        return []
+
+    items = payload.get("results", []) if isinstance(payload, dict) else payload
+    results = []
+
+    for item in items or []:
+        url = (item.get("url") or item.get("link") or "").strip()
+        title = (item.get("title") or url).strip()
+        if url:
+            results.append({"title": title, "url": url})
+
+    _log(f"API RESULTS {len(results)}")
+    return _dedupe(results)
+
+
 def search(query: str):
     headers = {
         "User-Agent": "Mozilla/5.0",
@@ -373,6 +432,10 @@ def search(query: str):
 
     with requests.Session() as session:
         session.headers.update(headers)
+
+        api_results = _search_api(session, query)
+        if api_results:
+            return api_results
 
         if query.lower() in {"latest", "najnowsze"}:
             return _search_latest(session)
@@ -392,6 +455,7 @@ if __name__ == "__main__":
 
     data = search(q)
 
+    _log(f"TOTAL RESULTS {len(data)}")
     print(f"wyników: {len(data)}")
     for row in data[:20]:
         print(row)
