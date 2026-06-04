@@ -12,7 +12,29 @@ from pdf_generator import generate_pdf
 
 def _is_nip(q: str) -> bool:
     d = re.sub(r"[\s\-]", "", q)
-    return d.isdigit() and len(d) == 10
+    # NIP: 10 cyfr, NIE zaczyna się od 0 (pierwsze 3 cyfry = kod US, min 100)
+    return d.isdigit() and len(d) == 10 and not d.startswith("0")
+
+
+def _is_krs(q: str) -> bool:
+    d = re.sub(r"[\s\-]", "", q)
+    # KRS: do 10 cyfr, często z wiodącymi zerami (np. 0000399383)
+    return d.isdigit() and 1 <= len(d) <= 10 and (d.startswith("0") or len(d) < 10)
+
+
+def _shorten_for_search(name: str) -> str:
+    """Usuwa formę prawną i zostawia max 3 pierwsze słowa do wyszukiwania."""
+    import re as _re
+    suffixes = _re.compile(
+        r"\b(SPÓŁKA AKCYJNA|SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ|"
+        r"SPÓŁKA JAWNA|SPÓŁKA KOMANDYTOWA|SPÓŁKA PARTNERSKA|SPÓŁKA CYWILNA|"
+        r"S\.A\.|SP\. Z O\.O\.|SP\. J\.|SP\. K\.|S\.K\.A\.|"
+        r"AKCYJNA|OGRANICZONĄ|ODPOWIEDZIALNOŚCIĄ)\b",
+        _re.IGNORECASE,
+    )
+    short = suffixes.sub("", name).strip(" ,.-")
+    words = short.split()
+    return " ".join(words[:3]) if words else name
 
 app = Flask(__name__)
 app.secret_key = "osint-toolkit-dev"
@@ -84,35 +106,54 @@ def generate():
 
     results = {}
 
-    # Moduły które szukają po nazwie firmy, nie NIP
     NAME_MODULES = {"knf", "uokik", "rekrutacje"}
-    # Moduły które szukają po NIP/KRS
-    NIP_MODULES  = {"vat", "ceidg", "krs"}
 
-    # Jeśli zapytanie to NIP — najpierw pobierz nazwę firmy z VAT
+    # Explicit query_type ma priorytet nad auto-detekcją
+    if query_type == "nip":
+        detected_nip, detected_krs = True, False
+    elif query_type == "krs":
+        detected_nip, detected_krs = False, True
+    else:  # auto
+        detected_nip = _is_nip(query)
+        detected_krs = not detected_nip and _is_krs(query)
     company_name: str | None = None
-    detected_nip = _is_nip(query) or query_type == "nip"
 
+    # NIP → pobierz nazwę firmy z VAT (potrzebna dla name-based modułów)
     if detected_nip and any(m in selected for m in NAME_MODULES):
         try:
             vat_result = vat.run(query, "nip")
             if vat_result.get("status") == "ok":
-                company_name = vat_result["data"].get("nazwa", "")
-            # Zapisz wynik VAT od razu jeśli był wybrany
+                company_name = _shorten_for_search(vat_result["data"].get("nazwa", ""))
             if "vat" in selected:
                 results["vat"] = vat_result
         except Exception as e:
             if "vat" in selected:
                 results["vat"] = {"status": "error", "error": str(e), "data": {}}
 
+    # KRS → VAT nie obsługuje KRS, skip
+    if detected_krs and "vat" in selected:
+        results["vat"] = {
+            "status": "skipped",
+            "error": "Moduł VAT wymaga NIP — nie można wyszukać po numerze KRS.",
+            "data": {},
+        }
+
     def _run_module(name: str):
-        if detected_nip and name in NAME_MODULES:
-            # Użyj nazwy firmy dla modułów wyszukujących po nazwie
-            q = company_name or query
-            qt = "name" if company_name else query_type
-        else:
-            q, qt = query, query_type
-        return MODULES[name]["fn"](q, qt)
+        # VAT już obsłużony powyżej
+        if name == "vat":
+            return MODULES["vat"]["fn"](query, query_type)
+
+        if name in NAME_MODULES:
+            if company_name:
+                return MODULES[name]["fn"](company_name, "name")
+            # Brak nazwy (zapytanie to KRS lub nieznana forma) — pomiń
+            if detected_krs or detected_nip:
+                return {
+                    "status": "skipped",
+                    "error": "Brak nazwy firmy do wyszukania — podaj NIP lub nazwę firmy zamiast KRS.",
+                    "data": {},
+                }
+        return MODULES[name]["fn"](query, query_type)
 
     remaining = [n for n in selected if n not in results]
 

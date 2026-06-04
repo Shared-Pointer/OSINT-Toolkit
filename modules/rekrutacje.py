@@ -23,14 +23,19 @@ def _scrape_pracujpl(keyword: str, days_back: int = 30) -> dict:
         )
         page = ctx.new_page()
         page.goto(url, timeout=30000)
-        page.wait_for_selector('[data-test="default-offer"]', timeout=20000)
 
         # Zamknij dialog cookies jeśli się pojawi
         try:
-            page.click('button:has-text("Akceptuj")', timeout=3000)
+            page.click('button:has-text("Akceptuj")', timeout=4000)
             time.sleep(0.5)
         except Exception:
             pass
+
+        # Czekaj na oferty — jeśli nie ma, pobierz HTML i tak (może być brak wyników)
+        try:
+            page.wait_for_selector('[data-test="default-offer"]', timeout=15000)
+        except Exception:
+            pass  # brak ofert lub CF challenge — sprawdzimy __NEXT_DATA__
 
         html = page.content()
         browser.close()
@@ -119,20 +124,39 @@ def _is_nip(q: str) -> bool:
     return d.isdigit() and len(d) == 10
 
 
+def _shorten(name: str) -> str:
+    """Usuwa formę prawną — zostawia rdzeń nazwy do wyszukiwania."""
+    import re as _re
+    short = _re.sub(
+        r"\b(SPÓŁKA AKCYJNA|SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ|"
+        r"SPÓŁKA JAWNA|SPÓŁKA KOMANDYTOWA|SPÓŁKA PARTNERSKA|SPÓŁKA CYWILNA|"
+        r"S\.A\.|SP\. Z O\.O\.|SP\. J\.|SP\. K\.|S\.K\.A\.|"
+        r"AKCYJNA|OGRANICZONĄ|ODPOWIEDZIALNOŚCIĄ)\b",
+        "", name, flags=_re.IGNORECASE,
+    ).strip(" ,.-")
+    words = short.split()
+    return " ".join(words[:3]) if words else name
+
+
 def run(query: str, query_type: str = "auto") -> dict:
-    # pracuj.pl to wyszukiwanie po słowach kluczowych — NIP nie zadziała
     if query_type == "nip" or (query_type == "auto" and _is_nip(query)):
         return {
             "status": "skipped",
-            "error": "Moduł Rekrutacje wymaga nazwy firmy, nie NIP. "
-                     "Wpisz nazwę firmy w polu zapytania.",
+            "error": "Moduł Rekrutacje wymaga nazwy firmy, nie NIP.",
             "data": {},
         }
 
+    # Skróć formę prawną przed wyszukiwaniem
+    search_query = _shorten(query) if query_type == "name" else query
+
     try:
-        result = _scrape_pracujpl(query)
+        result = _scrape_pracujpl(search_query)
         offers = result.get("offers", [])
-        total = result.get("total_count", 0)
+
+        # Jeśli skrócona nazwa nie dała wyników, spróbuj oryginalną
+        if not offers and search_query != query:
+            result = _scrape_pracujpl(query)
+            offers = result.get("offers", [])
 
         if not offers:
             return {"status": "not_found", "data": result}

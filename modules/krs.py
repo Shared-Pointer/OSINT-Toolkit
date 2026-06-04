@@ -97,9 +97,16 @@ def run(query: str, query_type: str = "auto") -> dict:
     if query_type == "auto" and not _is_nip(query) and not query.replace(" ", "").isdigit():
         return {"status": "skipped", "error": "KRS wymaga NIP lub numeru KRS — podaj numer, nie nazwę firmy.", "data": {}}
 
+    _GARBAGE = {"wyszukiwarka krs", "nazwa / firma", "nazwa/firma"}
+
     try:
         data = _scrape_krs(query.replace("-", "").replace(" ", ""), query_type)
         if not data:
+            return {"status": "not_found", "data": {}}
+        # Wykryj gdy scraper złapał etykiety formularza zamiast danych
+        nazwa = (data.get("nazwa") or "").strip().lower()
+        krs_val = (data.get("krs") or "").strip().lower()
+        if nazwa in _GARBAGE or krs_val in _GARBAGE:
             return {"status": "not_found", "data": {}}
         return {"status": "ok", "data": data}
     except Exception as e:
