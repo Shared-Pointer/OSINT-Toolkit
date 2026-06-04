@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OSINT Toolkit</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>🔍 OSINT Toolkit</h1>
+    <p class="subtitle">Wywiad gospodarczy — generuj raporty PDF z wielu źródeł naraz</p>
+  </header>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="flash">
+        {% for msg in messages %}<p>{{ msg }}</p>{% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <form method="POST" action="/generate" id="mainForm">
+    <div class="card search-card">
+      <h2>Podmiot do sprawdzenia</h2>
+      <div class="input-row">
+        <input
+          type="text"
+          name="query"
+          id="query"
+          placeholder="NIP, numer KRS lub nazwa firmy…"
+          required
+          autocomplete="off"
+          class="query-input"
+        />
+        <select name="query_type" class="type-select">
+          <option value="auto">Wykryj automatycznie</option>
+          <option value="nip">NIP</option>
+          <option value="krs">KRS</option>
+          <option value="name">Nazwa firmy</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card modules-card">
+      <div class="modules-header">
+        <h2>Wybierz źródła</h2>
+        <div class="select-controls">
+          <button type="button" onclick="selectAll()" class="btn-text">Zaznacz wszystkie</button>
+          <span class="sep">·</span>
+          <button type="button" onclick="selectNone()" class="btn-text">Odznacz</button>
+        </div>
+      </div>
+
+      <div class="modules-grid">
+        {% for key, mod in modules.items() %}
+        <label class="module-item" for="mod_{{ key }}">
+          <input type="checkbox" name="modules" value="{{ key }}" id="mod_{{ key }}" checked>
+          <div class="module-box">
+            <span class="module-icon">{{ mod.icon }}</span>
+            <div class="module-info">
+              <strong>{{ mod.name }}</strong>
+              <span class="module-desc">{{ mod.desc }}</span>
+              {% if mod.needs_nip %}
+              <span class="tag-nip">wymaga NIP</span>
+              {% endif %}
+            </div>
+            <div class="checkmark">✓</div>
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="submit" class="btn-generate" id="submitBtn">
+        <span class="btn-icon">📄</span>
+        Generuj raport PDF
+      </button>
+      <p class="hint">Raport zostanie wygenerowany i pobrany automatycznie.</p>
+    </div>
+  </form>
+</div>
+
+<script>
+function selectAll() {
+  document.querySelectorAll('input[name="modules"]').forEach(cb => cb.checked = true);
+}
+function selectNone() {
+  document.querySelectorAll('input[name="modules"]').forEach(cb => cb.checked = false);
+}
+
+document.getElementById('mainForm').addEventListener('submit', function() {
+  const btn = document.getElementById('submitBtn');
+  btn.textContent = '⏳ Generowanie…';
+  btn.disabled = true;
+});
+</script>
+</body>
+</html>
