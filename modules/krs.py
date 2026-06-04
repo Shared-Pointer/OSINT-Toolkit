@@ -1,89 +1,87 @@
-"""KRS module — Ministerstwo Sprawiedliwości, Rejestr Przedsiębiorców."""
+"""KRS module — Portal Rejestrów Sądowych ekrs.ms.gov.pl (Playwright scraper)."""
 
 from __future__ import annotations
+import re
 from typing import Optional
-import requests
-
-BASE_URL = "https://api.rejestry.ms.gov.pl"
 
 
-class KRSApiError(Exception): pass
+def _scrape_krs(query: str, query_type: str) -> Optional[dict]:
+    from playwright.sync_api import sync_playwright
 
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_extra_http_headers({"User-Agent": "Mozilla/5.0"})
 
-class KRSClient:
-    def __init__(self, timeout: int = 30):
-        self.timeout = timeout
-        self._session = requests.Session()
-        self._session.headers.update({
-            "Accept": "application/json",
-            "User-Agent": "Mozilla/5.0 OSINT-Toolkit/1.0",
-        })
+        # Wyszukiwarka KRS
+        page.goto("https://ekrs.ms.gov.pl/web/wyszukiwarka-krs/strona-glowna/", timeout=30000)
+        page.wait_for_load_state("networkidle", timeout=30000)
 
-    def _get(self, path: str, params: dict | None = None) -> dict:
-        resp = self._session.get(f"{BASE_URL}{path}", params=params, timeout=self.timeout)
-        if not resp.ok:
-            raise KRSApiError(f"HTTP {resp.status_code}: {resp.text[:200]}")
-        return resp.json()
-
-    def search_by_nip(self, nip: str) -> Optional[dict]:
-        """Szuka podmiotu po NIP. Zwraca pierwszy wynik lub None."""
-        data = self._get("/api/krs/podmiotSearch", {"nip": nip})
-        items = data.get("odpis", []) or data.get("items", []) or []
-        if isinstance(data, list):
-            items = data
-        return items[0] if items else None
-
-    def search_by_krs(self, krs: str) -> Optional[dict]:
-        """Szuka podmiotu po numerze KRS."""
-        krs_padded = krs.zfill(10)
-        data = self._get("/api/krs/podmiotSearch", {"krs": krs_padded})
-        items = data.get("odpis", []) or data.get("items", []) or []
-        if isinstance(data, list):
-            items = data
-        return items[0] if items else None
-
-    def get_odpis(self, krs: str) -> Optional[dict]:
-        """Pobiera pełny odpis aktualny dla danego numeru KRS."""
-        krs_padded = krs.zfill(10)
+        # Wybór trybu wyszukiwania i wpisanie wartości
         try:
-            return self._get(f"/api/krs/OdpisAktualny/{krs_padded}", {"rejestr": "P", "format": "json"})
-        except KRSApiError:
-            try:
-                return self._get(f"/api/krs/OdpisAktualny/{krs_padded}", {"rejestr": "S", "format": "json"})
-            except KRSApiError:
-                return None
+            if query_type in ("nip", "auto"):
+                # Szukamy pola NIP
+                nip_input = page.query_selector('input[placeholder*="NIP"], input[id*="nip"], input[formcontrolname*="nip"]')
+                if nip_input:
+                    nip_input.fill(query)
+                else:
+                    # Fallback: pierwsze pole tekstowe
+                    page.fill('input[type="text"]', query)
+            else:
+                krs_input = page.query_selector('input[placeholder*="KRS"], input[id*="krs"]')
+                if krs_input:
+                    krs_input.fill(query)
+                else:
+                    page.fill('input[type="text"]', query)
 
+            # Submit
+            btn = page.query_selector('button[type="submit"], button:has-text("Szukaj"), button:has-text("Wyszukaj")')
+            if btn:
+                btn.click()
+            else:
+                page.keyboard.press("Enter")
 
-def _parse_odpis(odpis: dict) -> dict:
-    """Wyciąga kluczowe pola z odpisu KRS."""
-    nagl = odpis.get("naglowekA") or {}
-    dane = (odpis.get("odpis", {}) or {}).get("dane", {}) or odpis.get("dane", {}) or {}
+            page.wait_for_load_state("networkidle", timeout=20000)
 
-    # Próba wyciągnięcia z różnych możliwych kształtów odpowiedzi
-    podmiot = dane.get("dzial1", {}).get("danePodmiotu", {}) or {}
-    zarzad = dane.get("dzial2", {}).get("organPrzedsiebiorcy", {}) or {}
-    kapital = dane.get("dzial1", {}).get("kapital", {}) or {}
-    adres = dane.get("dzial1", {}).get("siedzibaIAdres", {}) or {}
+        except Exception:
+            browser.close()
+            return None
 
-    czlonkowie = zarzad.get("wspólnicyLubCzlonkowie", []) or zarzad.get("czlonkowie", []) or []
-    if isinstance(czlonkowie, dict):
-        czlonkowie = [czlonkowie]
+        # Próba wyciągnięcia danych z wyników
+        result = {}
 
-    return {
-        "krs": nagl.get("numerKRS") or odpis.get("krs"),
-        "nazwa": podmiot.get("nazwa") or nagl.get("nazwa"),
-        "forma_prawna": podmiot.get("formaPrawna"),
-        "nip": podmiot.get("nip"),
-        "regon": podmiot.get("regon"),
-        "adres": f"{adres.get('ulica', '')} {adres.get('nrDomu', '')}, {adres.get('kodPocztowy', '')} {adres.get('miejscowosc', '')}".strip(", "),
-        "kapital_zakladowy": kapital.get("wysokoscKapitaluZakladowego"),
-        "zarzad": [
-            f"{os.get('imie1', '')} {os.get('imie2', '')} {os.get('nazwisko', '')}".strip()
-            for os in czlonkowie
-            if isinstance(os, dict)
-        ][:10],
-        "raw_available": True,
-    }
+        # Nazwa firmy
+        for sel in ['h1', 'h2', '.company-name', '[class*="name"]', 'td:first-child']:
+            el = page.query_selector(sel)
+            if el:
+                text = el.inner_text().strip()
+                if len(text) > 3 and not text.lower().startswith(("szukaj", "wynik", "portal")):
+                    result["nazwa"] = text
+                    break
+
+        # Zbierz wszystkie tabele z danymi
+        rows = page.query_selector_all("table tr, .data-row")
+        for row in rows:
+            cells = row.query_selector_all("td, th")
+            if len(cells) >= 2:
+                label = cells[0].inner_text().strip().lower()
+                value = cells[1].inner_text().strip()
+                if "krs" in label and not result.get("krs"):
+                    result["krs"] = re.sub(r"\D", "", value).zfill(10) if re.search(r"\d", value) else value
+                elif "nip" in label and not result.get("nip"):
+                    result["nip"] = re.sub(r"[\s\-]", "", value)
+                elif "regon" in label and not result.get("regon"):
+                    result["regon"] = value
+                elif "forma" in label and not result.get("forma_prawna"):
+                    result["forma_prawna"] = value
+                elif any(k in label for k in ("siedzib", "adres", "ulica")) and not result.get("adres"):
+                    result["adres"] = value
+                elif "kapita" in label and not result.get("kapital_zakladowy"):
+                    result["kapital_zakladowy"] = value
+
+        browser.close()
+
+    return result if result else None
 
 
 # ── Module interface ─────────────────────────────────────────────────────────
@@ -93,38 +91,16 @@ def _is_nip(q: str) -> bool:
     return d.isdigit() and len(d) == 10
 
 
-def _is_krs(q: str) -> bool:
-    d = q.replace("-", "").replace(" ", "")
-    return d.isdigit() and len(d) <= 10
-
-
 def run(query: str, query_type: str = "auto") -> dict:
+    if query_type not in ("nip", "krs", "auto"):
+        return {"status": "skipped", "error": "KRS wymaga NIP lub numeru KRS.", "data": {}}
+    if query_type == "auto" and not _is_nip(query) and not query.replace(" ", "").isdigit():
+        return {"status": "skipped", "error": "KRS wymaga NIP lub numeru KRS — podaj numer, nie nazwę firmy.", "data": {}}
+
     try:
-        client = KRSClient()
-        nip = query.replace("-", "").replace(" ", "")
-
-        raw = None
-
-        if query_type == "krs" or (query_type == "auto" and _is_krs(query) and not _is_nip(query)):
-            raw = client.get_odpis(nip)
-        elif query_type == "nip" or (query_type == "auto" and _is_nip(query)):
-            # Najpierw szukamy po NIP → dostajemy KRS → pobieramy odpis
-            result = client.search_by_nip(nip)
-            if result:
-                krs_num = result.get("krs") or result.get("numerKRS", "")
-                if krs_num:
-                    raw = client.get_odpis(str(krs_num))
-                if not raw:
-                    raw = result
-        else:
-            return {"status": "skipped", "error": "KRS wymaga NIP lub numeru KRS.", "data": {}}
-
-        if not raw:
+        data = _scrape_krs(query.replace("-", "").replace(" ", ""), query_type)
+        if not data:
             return {"status": "not_found", "data": {}}
-
-        return {"status": "ok", "data": _parse_odpis(raw)}
-
-    except KRSApiError as e:
-        return {"status": "error", "error": str(e), "data": {}}
+        return {"status": "ok", "data": data}
     except Exception as e:
         return {"status": "error", "error": str(e), "data": {}}
