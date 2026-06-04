@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from flask import Flask, render_template, request, send_file, redirect, url_for, flash
 
-from modules import ceidg, vat, krs, knf, uokik
+from modules import ceidg, vat, krs, knf, uokik, rekrutacje
 from pdf_generator import generate_pdf
 
 app = Flask(__name__)
@@ -46,6 +46,13 @@ MODULES = {
         "icon": "⚖️",
         "needs_nip": False,
         "fn": uokik.run,
+    },
+    "rekrutacje": {
+        "name": "Rekrutacje",
+        "desc": "Aktywne oferty pracy firmy (pracuj.pl) — wymaga nazwy firmy",
+        "icon": "💼",
+        "needs_nip": False,
+        "fn": rekrutacje.run,
     },
 }
 

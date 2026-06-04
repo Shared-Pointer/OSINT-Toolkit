@@ -128,30 +128,17 @@ def _data_table(rows: list[tuple[str, str]], styles) -> Table:
         ("LEFTPADDING", (1,0), (1,-1), 8),
         ("RIGHTPADDING", (1,0), (-1,-1), 12),
         ("LINEBELOW", (0,0), (-1,-2), 0.3, colors.HexColor("#e2e8f0")),
-        ("BACKGROUND", (0,1), (-1,1), LGRAY),
-        ("BACKGROUND", (0,3), (-1,3), LGRAY),
-        ("BACKGROUND", (0,5), (-1,5), LGRAY),
-        ("BACKGROUND", (0,7), (-1,7), LGRAY),
-        ("BACKGROUND", (0,9), (-1,9), LGRAY),
     ]
+    # Naprzemienne tło — tylko dla istniejących wierszy
+    for i in range(1, len(data), 2):
+        ts.append(("BACKGROUND", (0, i), (-1, i), LGRAY))
     t.setStyle(TableStyle(ts))
     return t
 
 
 def _section_box(header_table, content_flowables):
-    """Otacza sekcję ramką."""
-    inner = Table(
-        [[f] for f in content_flowables],
-        colWidths=["100%"],
-    )
-    inner.setStyle(TableStyle([
-        ("BOX", (0,0), (-1,-1), 0.5, colors.HexColor("#e2e8f0")),
-        ("LEFTPADDING", (0,0), (-1,-1), 0),
-        ("RIGHTPADDING", (0,0), (-1,-1), 0),
-        ("TOPPADDING", (0,0), (-1,-1), 0),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 0),
-    ]))
-    return [header_table, inner, Spacer(1, 14)]
+    """Zwraca header + content jako listę flowables (bez zewnętrznej tabeli — pozwala na podział stron)."""
+    return [header_table] + content_flowables + [Spacer(1, 14)]
 
 
 # ── Budowanie sekcji ─────────────────────────────────────────────────────────
@@ -175,7 +162,10 @@ def _section_vat(result: dict, styles) -> list:
         if d.get("data_wykreslenia"):
             rows.append(("Data wykreślenia", d["data_wykreslenia"]))
         if d.get("rachunki_bankowe"):
-            rows.append(("Rachunki bankowe", "\n".join(d["rachunki_bankowe"])))
+            rachunki = d["rachunki_bankowe"]
+            shown = rachunki[:10]
+            suffix = f" (+{len(rachunki)-10} więcej)" if len(rachunki) > 10 else ""
+            rows.append(("Rachunki bankowe", "<br/>".join(shown) + suffix))
         if d.get("reprezentanci"):
             rows.append(("Reprezentanci", ", ".join(d["reprezentanci"])))
         if d.get("wspolnicy"):
@@ -332,12 +322,120 @@ def _section_uokik(result: dict, styles) -> list:
     return _section_box(header, content)
 
 
+def _section_rekrutacje(result: dict, styles) -> list:
+    status = result.get("status", "error")
+    header = _header_row("Rekrutacje — Aktywne Oferty Pracy (pracuj.pl)", status, "💼", styles)
+    d = result.get("data", {})
+
+    if status == "ok" and d:
+        offers = d.get("offers", [])
+        total = d.get("total_count", len(offers))
+        days_back = d.get("days_back", 30)
+        query_used = d.get("query_used", "")
+
+        summary_text = f"Znaleziono {total} ofert pracy za ostatnie {days_back} dni"
+        if total > len(offers):
+            summary_text += f" — pokazano pierwszych {len(offers)}"
+        summary_text += f" (zapytanie: \"{query_used}\")"
+
+        content = [
+            Spacer(1, 6),
+            Paragraph(summary_text, ParagraphStyle("sum", parent=styles["body"],
+                textColor=BLUE, fontName="Helvetica-Bold")),
+            Spacer(1, 10),
+        ]
+
+        if total > len(offers):
+            content.append(Paragraph(
+                f"ℹ Pracuj.pl udostępnia maks. 50 wyników bez logowania. "
+                f"Pozostałe {total - len(offers)} ofert dostępne na stronie.",
+                ParagraphStyle("note", parent=styles["small"], textColor=GRAY,
+                    fontName="Helvetica-Oblique"),
+            ))
+            content.append(Spacer(1, 8))
+
+        # Tabela ofert
+        table_data = [[
+            Paragraph("Stanowisko", styles["label"]),
+            Paragraph("Firma", styles["label"]),
+            Paragraph("Wynagrodzenie", styles["label"]),
+            Paragraph("Lokalizacja", styles["label"]),
+            Paragraph("Data", styles["label"]),
+        ]]
+
+        for offer in offers:
+            locations_str = ", ".join(offer.get("locations", []))[:40]
+            salary = offer.get("salary") or "—"
+            date = offer.get("date", "")[:7]  # YYYY-MM
+            table_data.append([
+                Paragraph(offer.get("title", "")[:60], styles["value"]),
+                Paragraph(offer.get("company", "")[:35], styles["value"]),
+                Paragraph(salary[:30], styles["value"]),
+                Paragraph(locations_str, styles["value"]),
+                Paragraph(date, styles["value"]),
+            ])
+
+        col_widths = [5.5*cm, 3.5*cm, 3*cm, 3*cm, 1.8*cm]
+        offers_table = Table(table_data, colWidths=col_widths, repeatRows=1)
+        row_count = len(table_data)
+        style_cmds = [
+            ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+            ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("LINEBELOW", (0, 0), (-1, 0), 0.5, BLUE),
+            ("LINEBELOW", (0, 1), (-1, -1), 0.3, colors.HexColor("#e2e8f0")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ]
+        for i in range(2, row_count, 2):
+            style_cmds.append(("BACKGROUND", (0, i), (-1, i), LGRAY))
+        offers_table.setStyle(TableStyle(style_cmds))
+        # Tabela może być wielostronicowa — zwracamy ją poza section_box
+        flowables = [header]
+        flowables += [Spacer(1, 6),
+                      Paragraph(summary_text, ParagraphStyle("sum", parent=styles["body"],
+                          textColor=BLUE, fontName="Helvetica-Bold")),
+                      Spacer(1, 6)]
+        if total > len(offers):
+            flowables.append(Paragraph(
+                f"ℹ Pracuj.pl udostępnia maks. 50 wyników bez logowania. "
+                f"Pozostałe {total - len(offers)} ofert dostępne na stronie.",
+                ParagraphStyle("note", parent=styles["small"], textColor=GRAY,
+                    fontName="Helvetica-Oblique")))
+            flowables.append(Spacer(1, 6))
+        flowables.append(offers_table)
+        flowables.append(Spacer(1, 14))
+        return flowables
+
+    elif status == "not_found":
+        content = [Spacer(1, 6),
+                   Paragraph("Brak aktywnych ofert pracy dla podanej nazwy firmy.", styles["body"]),
+                   Spacer(1, 6)]
+    elif status == "skipped":
+        content = [Spacer(1, 6),
+                   Paragraph(result.get("error", "Moduł wymaga nazwy firmy."), styles["body"]),
+                   Spacer(1, 6)]
+    else:
+        msg = result.get("error") or "Nieznany błąd"
+        content = [Spacer(1, 6),
+                   Paragraph(f"Błąd: {msg}",
+                              ParagraphStyle("err", parent=styles["body"], textColor=RED)),
+                   Spacer(1, 6)]
+
+    return _section_box(header, content)
+
+
 SECTION_BUILDERS = {
     "vat": _section_vat,
     "ceidg": _section_ceidg,
     "krs": _section_krs,
     "knf": _section_knf,
     "uokik": _section_uokik,
+    "rekrutacje": _section_rekrutacje,
 }
 
 
