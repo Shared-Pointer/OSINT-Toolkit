@@ -1,12 +1,18 @@
 """OSINT Toolkit — Flask app."""
 
 import io
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from flask import Flask, render_template, request, send_file, redirect, url_for, flash
 
 from modules import ceidg, vat, krs, knf, uokik, rekrutacje
 from pdf_generator import generate_pdf
+
+
+def _is_nip(q: str) -> bool:
+    d = re.sub(r"[\s\-]", "", q)
+    return d.isdigit() and len(d) == 10
 
 app = Flask(__name__)
 app.secret_key = "osint-toolkit-dev"
@@ -78,16 +84,48 @@ def generate():
 
     results = {}
 
-    with ThreadPoolExecutor(max_workers=len(selected)) as executor:
+    # Moduły które szukają po nazwie firmy, nie NIP
+    NAME_MODULES = {"knf", "uokik", "rekrutacje"}
+    # Moduły które szukają po NIP/KRS
+    NIP_MODULES  = {"vat", "ceidg", "krs"}
+
+    # Jeśli zapytanie to NIP — najpierw pobierz nazwę firmy z VAT
+    company_name: str | None = None
+    detected_nip = _is_nip(query) or query_type == "nip"
+
+    if detected_nip and any(m in selected for m in NAME_MODULES):
+        try:
+            vat_result = vat.run(query, "nip")
+            if vat_result.get("status") == "ok":
+                company_name = vat_result["data"].get("nazwa", "")
+            # Zapisz wynik VAT od razu jeśli był wybrany
+            if "vat" in selected:
+                results["vat"] = vat_result
+        except Exception as e:
+            if "vat" in selected:
+                results["vat"] = {"status": "error", "error": str(e), "data": {}}
+
+    def _run_module(name: str):
+        if detected_nip and name in NAME_MODULES:
+            # Użyj nazwy firmy dla modułów wyszukujących po nazwie
+            q = company_name or query
+            qt = "name" if company_name else query_type
+        else:
+            q, qt = query, query_type
+        return MODULES[name]["fn"](q, qt)
+
+    remaining = [n for n in selected if n not in results]
+
+    with ThreadPoolExecutor(max_workers=max(len(remaining), 1)) as executor:
         futures = {
-            executor.submit(MODULES[name]["fn"], query, query_type): name
-            for name in selected
+            executor.submit(_run_module, name): name
+            for name in remaining
             if name in MODULES
         }
         for future in as_completed(futures):
             name = futures[future]
             try:
-                results[name] = future.result(timeout=45)
+                results[name] = future.result(timeout=60)
             except Exception as e:
                 results[name] = {"status": "error", "error": str(e), "data": {}}
 

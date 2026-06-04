@@ -3,7 +3,7 @@
 from __future__ import annotations
 from datetime import datetime
 from io import BytesIO
-from typing import Any
+import os
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -14,6 +14,51 @@ from reportlab.platypus import (
     TableStyle, HRFlowable, KeepTogether,
 )
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+
+# ── Rejestracja fontów z polskimi znakami ────────────────────────────────────
+def _register_fonts():
+    # Ścieżka do fontów bundlowanych z projektem (static/fonts/)
+    _here = os.path.dirname(os.path.abspath(__file__))
+    bundled = os.path.join(_here, "static", "fonts")
+    rl_fonts_dir = os.path.dirname(pdfmetrics.__file__).replace("pdfbase", "fonts")
+
+    candidates_regular = [
+        os.path.join(bundled, "DejaVuSans.ttf"),           # bundlowany w projekcie (zawsze)
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", # Linux
+        "/Library/Fonts/Arial Unicode.ttf",                # macOS fallback
+        "C:/Windows/Fonts/arialuni.ttf",
+        "C:/Windows/Fonts/arial.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        os.path.join(rl_fonts_dir, "Vera.ttf"),            # ostateczny fallback (brak PL)
+    ]
+    candidates_bold = [
+        os.path.join(bundled, "DejaVuSans-Bold.ttf"),
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "C:/Windows/Fonts/arialbd.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        os.path.join(rl_fonts_dir, "VeraBd.ttf"),
+    ]
+
+    reg = next((p for p in candidates_regular if os.path.exists(p)), None)
+    bold = next((p for p in candidates_bold if os.path.exists(p)), None)
+
+    if reg:
+        pdfmetrics.registerFont(TTFont("UniFont", reg))
+    if bold:
+        pdfmetrics.registerFont(TTFont("UniFont-Bold", bold))
+    elif reg:
+        pdfmetrics.registerFont(TTFont("UniFont-Bold", reg))
+
+    return bool(reg)
+
+
+_UNICODE_FONTS = _register_fonts()
+FONT_REGULAR = "UniFont" if _UNICODE_FONTS else FONT_REGULAR
+FONT_BOLD    = "UniFont-Bold" if _UNICODE_FONTS else FONT_BOLD
+FONT_ITALIC  = FONT_REGULAR  # Vera nie ma oddzielnego oblique
 
 
 # ── Kolory ───────────────────────────────────────────────────────────────────
@@ -32,30 +77,30 @@ def _build_styles():
     base = getSampleStyleSheet()
     S = {}
     S["title"] = ParagraphStyle("title", parent=base["Normal"],
-        fontSize=22, textColor=WHITE, fontName="Helvetica-Bold", leading=28)
+        fontSize=22, textColor=WHITE, fontName=FONT_BOLD, leading=28)
     S["subtitle"] = ParagraphStyle("subtitle", parent=base["Normal"],
-        fontSize=9, textColor=colors.HexColor("#a0aec0"), leading=14)
+        fontSize=9, textColor=colors.HexColor("#a0aec0"), fontName=FONT_REGULAR, leading=14)
     S["meta"] = ParagraphStyle("meta", parent=base["Normal"],
-        fontSize=8, textColor=colors.HexColor("#a0aec0"), leading=12)
+        fontSize=8, textColor=colors.HexColor("#a0aec0"), fontName=FONT_REGULAR, leading=12)
     S["section_title"] = ParagraphStyle("section_title", parent=base["Normal"],
-        fontSize=11, textColor=WHITE, fontName="Helvetica-Bold", leading=16)
+        fontSize=11, textColor=WHITE, fontName=FONT_BOLD, leading=16)
     S["body"] = ParagraphStyle("body", parent=base["Normal"],
-        fontSize=9, textColor=colors.HexColor("#2d3748"), leading=14)
+        fontSize=9, textColor=colors.HexColor("#2d3748"), fontName=FONT_REGULAR, leading=14)
     S["label"] = ParagraphStyle("label", parent=base["Normal"],
-        fontSize=9, textColor=GRAY, fontName="Helvetica-Bold", leading=14)
+        fontSize=9, textColor=GRAY, fontName=FONT_BOLD, leading=14)
     S["value"] = ParagraphStyle("value", parent=base["Normal"],
-        fontSize=9, textColor=colors.HexColor("#1a202c"), leading=14)
+        fontSize=9, textColor=colors.HexColor("#1a202c"), fontName=FONT_REGULAR, leading=14)
     S["small"] = ParagraphStyle("small", parent=base["Normal"],
-        fontSize=8, textColor=GRAY, leading=12)
+        fontSize=8, textColor=GRAY, fontName=FONT_REGULAR, leading=12)
     S["alert_ok"] = ParagraphStyle("alert_ok", parent=base["Normal"],
-        fontSize=9, textColor=colors.HexColor("#276749"), leading=14,
+        fontSize=9, textColor=colors.HexColor("#276749"), fontName=FONT_REGULAR, leading=14,
         backColor=colors.HexColor("#f0fff4"), borderPadding=8)
     S["alert_warn"] = ParagraphStyle("alert_warn", parent=base["Normal"],
-        fontSize=9, textColor=colors.HexColor("#c05621"), leading=14)
+        fontSize=9, textColor=colors.HexColor("#c05621"), fontName=FONT_REGULAR, leading=14)
     S["footer"] = ParagraphStyle("footer", parent=base["Normal"],
-        fontSize=7.5, textColor=GRAY, alignment=TA_CENTER, leading=12)
+        fontSize=7.5, textColor=GRAY, fontName=FONT_REGULAR, alignment=TA_CENTER, leading=12)
     S["subject"] = ParagraphStyle("subject", parent=base["Normal"],
-        fontSize=15, textColor=NAVY, fontName="Helvetica-Bold", leading=20)
+        fontSize=15, textColor=NAVY, fontName=FONT_BOLD, leading=20)
     return S
 
 
@@ -81,7 +126,7 @@ def _header_row(text: str, status: str, icon: str, styles) -> Table:
 
     title_cell = Paragraph(f"{icon}  {text}", styles["section_title"])
     badge = Table([[Paragraph(badge_label, ParagraphStyle("b", fontSize=8,
-        textColor=WHITE, fontName="Helvetica-Bold", leading=12))]],
+        textColor=WHITE, fontName=FONT_BOLD, leading=12))]],
         colWidths=[2.2*cm])
     badge.setStyle(TableStyle([
         ("BACKGROUND", (0,0), (-1,-1), badge_color),
@@ -144,7 +189,7 @@ def _section_box(header_table, content_flowables):
 # ── Budowanie sekcji ─────────────────────────────────────────────────────────
 def _section_vat(result: dict, styles) -> list:
     status = result.get("status", "error")
-    header = _header_row("Wykaz Podatników VAT (MF/KAS)", status, "🏦", styles)
+    header = _header_row("Wykaz Podatników VAT (MF/KAS)", status, "[VAT]", styles)
     d = result.get("data", {})
 
     if status == "ok" and d:
@@ -184,7 +229,7 @@ def _section_vat(result: dict, styles) -> list:
 
 def _section_ceidg(result: dict, styles) -> list:
     status = result.get("status", "error")
-    header = _header_row("CEIDG — Jednoosobowe Działalności Gospodarcze", status, "👤", styles)
+    header = _header_row("CEIDG — Jednoosobowe Działalności Gospodarcze", status, "[JDG]", styles)
     d = result.get("data", {})
 
     if status == "ok" and d:
@@ -224,7 +269,7 @@ def _section_ceidg(result: dict, styles) -> list:
 
 def _section_krs(result: dict, styles) -> list:
     status = result.get("status", "error")
-    header = _header_row("KRS — Krajowy Rejestr Sądowy", status, "🏛", styles)
+    header = _header_row("KRS — Krajowy Rejestr Sądowy", status, "[KRS]", styles)
     d = result.get("data", {})
 
     if status == "ok" and d:
@@ -253,7 +298,7 @@ def _section_krs(result: dict, styles) -> list:
 
 def _section_knf(result: dict, styles) -> list:
     status = result.get("status", "error")
-    header = _header_row("KNF — Lista Ostrzeżeń Publicznych", status, "⚠", styles)
+    header = _header_row("KNF — Lista Ostrzeżeń Publicznych", status, "[KNF]", styles)
     d = result.get("data", {})
 
     if status == "ok" and d:
@@ -262,7 +307,7 @@ def _section_knf(result: dict, styles) -> list:
             alert = Paragraph(
                 f"⚠ UWAGA: Podmiot figuruje na liście ostrzeżeń KNF ({len(matches)} wpis/y).",
                 ParagraphStyle("warn", parent=styles["body"], textColor=colors.HexColor("#c05621"),
-                               fontName="Helvetica-Bold"))
+                               fontName=FONT_BOLD))
             content = [Spacer(1,6), alert, Spacer(1,8)]
             for w in matches:
                 rows = [
@@ -279,7 +324,7 @@ def _section_knf(result: dict, styles) -> list:
             ok_text = f"Podmiot nie figuruje na liście ostrzeżeń KNF. Sprawdzono {total} wpisów."
             content = [Spacer(1,6),
                        Paragraph(f"✓ {ok_text}", ParagraphStyle("ok", parent=styles["body"],
-                                 textColor=GREEN, fontName="Helvetica-Bold")),
+                                 textColor=GREEN, fontName=FONT_BOLD)),
                        Spacer(1,6)]
     else:
         msg = result.get("error") or "Nieznany błąd"
@@ -290,7 +335,7 @@ def _section_knf(result: dict, styles) -> list:
 
 def _section_uokik(result: dict, styles) -> list:
     status = result.get("status", "error")
-    header = _header_row("UOKiK — Decyzje Urzędu Ochrony Konkurencji", status, "⚖", styles)
+    header = _header_row("UOKiK — Decyzje Urzędu Ochrony Konkurencji", status, "[UOK]", styles)
     d = result.get("data", {})
 
     if status in ("ok", "not_found"):
@@ -299,21 +344,28 @@ def _section_uokik(result: dict, styles) -> list:
             alert = Paragraph(
                 f"⚠ Znaleziono {len(decisions)} decyzji UOKiK dotyczących podmiotu.",
                 ParagraphStyle("warn", parent=styles["body"], textColor=colors.HexColor("#c05621"),
-                               fontName="Helvetica-Bold"))
+                               fontName=FONT_BOLD))
             content = [Spacer(1,6), alert, Spacer(1,8)]
             for dec in decisions[:20]:
-                title = (dec.get("title") or dec.get("url", ""))[:120]
+                title = (dec.get("title") or dec.get("url", ""))[:100]
                 url = dec.get("url", "")
+                # Klikalne linki — ReportLab <link href="..."> w Paragraph
+                link_style = ParagraphStyle("url", parent=styles["small"],
+                    textColor=BLUE, fontName=FONT_REGULAR)
                 content.append(Paragraph(f"• {title}", styles["body"]))
-                content.append(Paragraph(url, ParagraphStyle("url", parent=styles["small"],
-                    textColor=BLUE)))
+                if url:
+                    safe_url = url.replace("&", "&amp;")
+                    content.append(Paragraph(
+                        f'<link href="{safe_url}">{url[:90]}{"…" if len(url) > 90 else ""}</link>',
+                        link_style,
+                    ))
                 content.append(Spacer(1, 3))
             content.append(Spacer(1, 4))
         else:
             content = [Spacer(1,6),
                        Paragraph("✓ Brak decyzji UOKiK dla podanego podmiotu.",
                                  ParagraphStyle("ok", parent=styles["body"],
-                                 textColor=GREEN, fontName="Helvetica-Bold")),
+                                 textColor=GREEN, fontName=FONT_BOLD)),
                        Spacer(1,6)]
     else:
         msg = result.get("error") or "Nieznany błąd"
@@ -324,7 +376,7 @@ def _section_uokik(result: dict, styles) -> list:
 
 def _section_rekrutacje(result: dict, styles) -> list:
     status = result.get("status", "error")
-    header = _header_row("Rekrutacje — Aktywne Oferty Pracy (pracuj.pl)", status, "💼", styles)
+    header = _header_row("Rekrutacje — Aktywne Oferty Pracy (pracuj.pl)", status, "[HR]", styles)
     d = result.get("data", {})
 
     if status == "ok" and d:
@@ -341,7 +393,7 @@ def _section_rekrutacje(result: dict, styles) -> list:
         content = [
             Spacer(1, 6),
             Paragraph(summary_text, ParagraphStyle("sum", parent=styles["body"],
-                textColor=BLUE, fontName="Helvetica-Bold")),
+                textColor=BLUE, fontName=FONT_BOLD)),
             Spacer(1, 10),
         ]
 
@@ -350,7 +402,7 @@ def _section_rekrutacje(result: dict, styles) -> list:
                 f"ℹ Pracuj.pl udostępnia maks. 50 wyników bez logowania. "
                 f"Pozostałe {total - len(offers)} ofert dostępne na stronie.",
                 ParagraphStyle("note", parent=styles["small"], textColor=GRAY,
-                    fontName="Helvetica-Oblique"),
+                    fontName=FONT_ITALIC),
             ))
             content.append(Spacer(1, 8))
 
@@ -381,7 +433,7 @@ def _section_rekrutacje(result: dict, styles) -> list:
         style_cmds = [
             ("BACKGROUND", (0, 0), (-1, 0), NAVY),
             ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
             ("FONTSIZE", (0, 0), (-1, -1), 8),
             ("TOPPADDING", (0, 0), (-1, -1), 4),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
@@ -398,14 +450,14 @@ def _section_rekrutacje(result: dict, styles) -> list:
         flowables = [header]
         flowables += [Spacer(1, 6),
                       Paragraph(summary_text, ParagraphStyle("sum", parent=styles["body"],
-                          textColor=BLUE, fontName="Helvetica-Bold")),
+                          textColor=BLUE, fontName=FONT_BOLD)),
                       Spacer(1, 6)]
         if total > len(offers):
             flowables.append(Paragraph(
                 f"ℹ Pracuj.pl udostępnia maks. 50 wyników bez logowania. "
                 f"Pozostałe {total - len(offers)} ofert dostępne na stronie.",
                 ParagraphStyle("note", parent=styles["small"], textColor=GRAY,
-                    fontName="Helvetica-Oblique")))
+                    fontName=FONT_ITALIC)))
             flowables.append(Spacer(1, 6))
         flowables.append(offers_table)
         flowables.append(Spacer(1, 14))
@@ -466,16 +518,16 @@ def generate_pdf(
         canvas.setFillColor(NAVY)
         canvas.rect(0, A4[1] - 1.4*cm, A4[0], 1.4*cm, fill=1, stroke=0)
         canvas.setFillColor(WHITE)
-        canvas.setFont("Helvetica-Bold", 9)
+        canvas.setFont(FONT_BOLD, 9)
         canvas.drawString(2*cm, A4[1] - 0.9*cm, "OSINT Toolkit")
-        canvas.setFont("Helvetica", 8)
+        canvas.setFont(FONT_REGULAR, 8)
         canvas.setFillColor(colors.HexColor("#a0aec0"))
         canvas.drawRightString(A4[0] - 2*cm, A4[1] - 0.9*cm, query)
         # Footer line
         canvas.setStrokeColor(colors.HexColor("#e2e8f0"))
         canvas.setLineWidth(0.5)
         canvas.line(2*cm, 1.8*cm, A4[0] - 2*cm, 1.8*cm)
-        canvas.setFont("Helvetica", 7.5)
+        canvas.setFont(FONT_REGULAR, 7.5)
         canvas.setFillColor(GRAY)
         canvas.drawString(2*cm, 1.1*cm, "OSINT Toolkit · Dane z publicznych rejestrów · Nie stanowi porady prawnej")
         canvas.drawRightString(A4[0] - 2*cm, 1.1*cm, f"Strona {doc.page}")
@@ -489,7 +541,7 @@ def generate_pdf(
 
     # ── Cover block ──────────────────────────────────────────────────────
     cover = Table([
-        [Paragraph("🔍 OSINT Toolkit", styles["title"])],
+        [Paragraph("OSINT Toolkit", styles["title"])],
         [Paragraph("Raport Wywiadowczy — Publiczne Rejestry Gospodarcze", styles["subtitle"])],
     ], colWidths=[W])
     cover.setStyle(TableStyle([
@@ -510,7 +562,7 @@ def generate_pdf(
          Paragraph("Typ zapytania", styles["label"]),
          Paragraph("Źródła", styles["label"]),
          Paragraph("Data", styles["label"])],
-        [Paragraph(query, ParagraphStyle("q", parent=styles["value"], fontSize=11, fontName="Helvetica-Bold")),
+        [Paragraph(query, ParagraphStyle("q", parent=styles["value"], fontSize=11, fontName=FONT_BOLD)),
          Paragraph(query_type, styles["value"]),
          Paragraph(str(len(selected)), styles["value"]),
          Paragraph(generated_at, styles["value"])],

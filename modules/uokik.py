@@ -120,9 +120,34 @@ def search(query: str) -> list[dict]:
 
 # ── Module interface ─────────────────────────────────────────────────────────
 
+_LEGAL_SUFFIXES = re.compile(
+    r"\b(SPÓŁKA AKCYJNA|SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ|SPÓŁKA JAWNA|"
+    r"SPÓŁKA KOMANDYTOWA|SPÓŁKA PARTNERSKA|SPÓŁKA CYWILNA|"
+    r"S\.A\.|SP\. Z O\.O\.|SP\. J\.|SP\. K\.|S\.K\.A\.|"
+    r"AKCYJNA|OGRANICZONĄ|ODPOWIEDZIALNOŚCIĄ)\b",
+    re.IGNORECASE,
+)
+
+
+def _shorten_name(name: str) -> str:
+    """Wyciąga rdzeń nazwy firmy — usuwa formę prawną i nadmiarowe słowa."""
+    short = _LEGAL_SUFFIXES.sub("", name).strip(" ,.-")
+    # Jeśli po usunięciu zostaje tylko jedno słowo, użyj go
+    words = short.split()
+    if not words:
+        return name
+    # Bierz pierwsze 2-3 znaczące słowa
+    return " ".join(words[:3])
+
+
 def run(query: str, query_type: str = "auto") -> dict:
     try:
+        # Spróbuj pełną nazwą, potem skróconą jeśli brak wyników
         results = search(query)
+        if not results and len(query.split()) > 2:
+            short = _shorten_name(query)
+            if short.lower() != query.lower():
+                results = search(short)
         return {
             "status": "ok" if results else "not_found",
             "data": {"decisions": results[:20]},
