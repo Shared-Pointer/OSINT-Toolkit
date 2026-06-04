@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DejaVu Sans', Arial, sans-serif; font-size: 10pt; color: #1a1a2e; background: #fff; }
+
+  /* Header */
+  .report-header { background: #1a1a2e; color: #fff; padding: 24px 32px; margin-bottom: 24px; }
+  .report-header h1 { font-size: 18pt; letter-spacing: 1px; margin-bottom: 4px; }
+  .report-header .subtitle { font-size: 9pt; color: #a0aec0; }
+  .report-meta { margin-top: 12px; font-size: 8.5pt; color: #cbd5e0; display: flex; gap: 24px; }
+
+  /* Subject card */
+  .subject-card { background: #f0f4ff; border-left: 4px solid #4361ee; padding: 16px 24px; margin: 0 32px 24px; border-radius: 4px; }
+  .subject-card .label { font-size: 8pt; text-transform: uppercase; letter-spacing: 1px; color: #4361ee; margin-bottom: 4px; }
+  .subject-card .value { font-size: 14pt; font-weight: bold; }
+  .subject-card .type-badge { display: inline-block; background: #4361ee; color: #fff; font-size: 8pt; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; }
+
+  /* Sections */
+  .section { margin: 0 32px 20px; page-break-inside: avoid; }
+  .section-header { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: #1a1a2e; color: #fff; border-radius: 4px 4px 0 0; }
+  .section-header .icon { font-size: 14pt; }
+  .section-header h2 { font-size: 11pt; font-weight: 600; }
+  .section-header .status-badge { margin-left: auto; font-size: 8pt; padding: 2px 10px; border-radius: 10px; font-weight: 600; }
+  .badge-ok { background: #48bb78; color: #fff; }
+  .badge-not_found { background: #718096; color: #fff; }
+  .badge-error { background: #fc8181; color: #fff; }
+  .badge-no_token { background: #ed8936; color: #fff; }
+  .badge-skipped { background: #a0aec0; color: #fff; }
+
+  .section-body { border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 4px 4px; padding: 16px; }
+
+  /* Data table */
+  table.data-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  table.data-table tr:nth-child(even) { background: #f7fafc; }
+  table.data-table td { padding: 5px 8px; font-size: 9.5pt; vertical-align: top; }
+  table.data-table td:first-child { font-weight: 600; color: #4a5568; width: 35%; }
+
+  /* Alert boxes */
+  .alert { padding: 10px 14px; border-radius: 4px; font-size: 9.5pt; margin-top: 8px; }
+  .alert-danger { background: #fff5f5; border: 1px solid #fed7d7; color: #c53030; }
+  .alert-success { background: #f0fff4; border: 1px solid #c6f6d5; color: #276749; }
+  .alert-info { background: #ebf8ff; border: 1px solid #bee3f8; color: #2b6cb0; }
+
+  /* KNF found */
+  .warning-item { background: #fffbeb; border: 1px solid #f6ad55; border-radius: 4px; padding: 10px 14px; margin-bottom: 8px; }
+  .warning-item .company-name { font-weight: bold; color: #c05621; }
+  .warning-item .meta { font-size: 8.5pt; color: #718096; margin-top: 4px; }
+
+  /* UOKiK decisions */
+  .decision-list { list-style: none; }
+  .decision-list li { padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 9pt; }
+  .decision-list li:last-child { border-bottom: none; }
+  .decision-list a { color: #4361ee; }
+
+  /* CEIDG list */
+  .firm-item { border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px 14px; margin-bottom: 8px; }
+  .firm-item .firm-name { font-weight: bold; font-size: 10.5pt; }
+  .firm-status { display: inline-block; font-size: 8pt; padding: 1px 7px; border-radius: 10px; margin-left: 6px; }
+  .status-AKTYWNY { background: #c6f6d5; color: #276749; }
+  .status-ZAWIESZONY { background: #feebc8; color: #c05621; }
+  .status-WYKRESLONY { background: #fed7d7; color: #c53030; }
+
+  /* Footer */
+  .report-footer { margin: 32px 32px 0; padding: 12px 0; border-top: 1px solid #e2e8f0; font-size: 8pt; color: #a0aec0; }
+
+  /* VAT status */
+  .vat-active { color: #276749; font-weight: bold; }
+  .vat-inactive { color: #c53030; font-weight: bold; }
+
+  .bank-account { font-family: monospace; font-size: 9pt; background: #f7fafc; padding: 2px 6px; border-radius: 3px; display: inline-block; margin: 1px 0; }
+
+  .no-data { color: #a0aec0; font-style: italic; font-size: 9pt; }
+  .error-msg { color: #e53e3e; font-size: 9pt; }
+</style>
+</head>
+<body>
+
+<div class="report-header">
+  <h1>🔍 OSINT Toolkit — Raport Wywiadowczy</h1>
+  <div class="subtitle">Automatyczny wywiad gospodarczy z publicznych źródeł</div>
+  <div class="report-meta">
+    <span>📅 Wygenerowano: {{ generated_at }}</span>
+    <span>📦 Źródła: {{ selected | length }}</span>
+  </div>
+</div>
+
+<div class="subject-card">
+  <div class="label">Podmiot</div>
+  <div class="value">
+    {{ query }}
+    <span class="type-badge">{{ query_type }}</span>
+  </div>
+</div>
+
+{# ── VAT ───────────────────────────────────────────────────────────────── #}
+{% if "vat" in selected %}
+{% set r = results.get("vat", {}) %}
+<div class="section">
+  <div class="section-header">
+    <span class="icon">{{ modules.vat.icon }}</span>
+    <h2>{{ modules.vat.name }}</h2>
+    <span class="status-badge badge-{{ r.status }}">{{ r.status | upper }}</span>
+  </div>
+  <div class="section-body">
+    {% if r.status == "ok" and r.data %}
+      {% set d = r.data %}
+      <table class="data-table">
+        <tr><td>Nazwa</td><td>{{ d.nazwa or "—" }}</td></tr>
+        <tr><td>NIP</td><td>{{ d.nip or "—" }}</td></tr>
+        <tr><td>REGON</td><td>{{ d.regon or "—" }}</td></tr>
+        <tr><td>KRS</td><td>{{ d.krs or "—" }}</td></tr>
+        <tr><td>Status VAT</td>
+          <td>
+            {% if d.status_vat == "Czynny" %}<span class="vat-active">✓ Czynny</span>
+            {% elif d.status_vat %}
+            <span class="vat-inactive">✗ {{ d.status_vat }}</span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        <tr><td>Adres</td><td>{{ d.adres or "—" }}</td></tr>
+        <tr><td>Data rejestracji VAT</td><td>{{ d.data_rejestracji or "—" }}</td></tr>
+        {% if d.data_wykreslenia %}
+        <tr><td>Data wykreślenia</td><td>{{ d.data_wykreslenia }}</td></tr>
+        {% endif %}
+        {% if d.rachunki_bankowe %}
+        <tr>
+          <td>Rachunki bankowe</td>
+          <td>
+            {% for r_bank in d.rachunki_bankowe %}
+              <div class="bank-account">{{ r_bank }}</div>
+            {% endfor %}
+          </td>
+        </tr>
+        {% endif %}
+        {% if d.reprezentanci %}
+        <tr><td>Reprezentanci</td><td>{{ d.reprezentanci | join(", ") }}</td></tr>
+        {% endif %}
+        {% if d.wspolnicy %}
+        <tr><td>Wspólnicy</td><td>{{ d.wspolnicy | join(", ") }}</td></tr>
+        {% endif %}
+      </table>
+    {% elif r.status == "not_found" %}
+      <div class="alert alert-info">Brak wpisu w Wykazie Podatników VAT dla podanego NIP.</div>
+    {% elif r.status == "skipped" %}
+      <div class="alert alert-info">Moduł VAT wymaga podania NIP. Wpisz NIP jako zapytanie.</div>
+    {% else %}
+      <div class="error-msg">{{ r.error or "Nieznany błąd" }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── CEIDG ─────────────────────────────────────────────────────────────── #}
+{% if "ceidg" in selected %}
+{% set r = results.get("ceidg", {}) %}
+<div class="section">
+  <div class="section-header">
+    <span class="icon">{{ modules.ceidg.icon }}</span>
+    <h2>{{ modules.ceidg.name }}</h2>
+    <span class="status-badge badge-{{ r.status }}">{{ r.status | upper }}</span>
+  </div>
+  <div class="section-body">
+    {% if r.status == "ok" and r.data %}
+      {% set d = r.data %}
+      {% if d.get("firms") %}
+        {% for firm in d.firms %}
+        <div class="firm-item">
+          <div class="firm-name">
+            {{ firm.nazwa }}
+            <span class="firm-status status-{{ firm.status }}">{{ firm.status }}</span>
+          </div>
+          <table class="data-table" style="margin-top:6px">
+            <tr><td>NIP</td><td>{{ firm.nip or "—" }}</td></tr>
+            <tr><td>REGON</td><td>{{ firm.regon or "—" }}</td></tr>
+            <tr><td>Adres</td><td>{{ firm.adres or "—" }}</td></tr>
+            <tr><td>Rozpoczęcie</td><td>{{ firm.data_rozpoczecia or "—" }}</td></tr>
+            {% if firm.pkd_przewazajacy %}<tr><td>PKD</td><td>{{ firm.pkd_przewazajacy }}</td></tr>{% endif %}
+          </table>
+        </div>
+        {% endfor %}
+      {% else %}
+        <table class="data-table">
+          <tr><td>Nazwa</td><td>{{ d.nazwa or "—" }}</td></tr>
+          <tr><td>NIP</td><td>{{ d.nip or "—" }}</td></tr>
+          <tr><td>REGON</td><td>{{ d.regon or "—" }}</td></tr>
+          <tr><td>Status</td><td>
+            <span class="firm-status status-{{ d.status }}">{{ d.status }}</span>
+          </td></tr>
+          <tr><td>Adres</td><td>{{ d.adres or "—" }}</td></tr>
+          <tr><td>Rozpoczęcie</td><td>{{ d.data_rozpoczecia or "—" }}</td></tr>
+          {% if d.data_zawieszenia %}<tr><td>Zawieszenie</td><td>{{ d.data_zawieszenia }}</td></tr>{% endif %}
+          {% if d.data_wykreslenia %}<tr><td>Wykreślenie</td><td>{{ d.data_wykreslenia }}</td></tr>{% endif %}
+          {% if d.pkd_przewazajacy %}<tr><td>PKD (przeważające)</td><td>{{ d.pkd_przewazajacy }}</td></tr>{% endif %}
+          {% if d.telefon %}<tr><td>Telefon</td><td>{{ d.telefon }}</td></tr>{% endif %}
+          {% if d.email %}<tr><td>E-mail</td><td>{{ d.email }}</td></tr>{% endif %}
+          {% if d.www %}<tr><td>WWW</td><td>{{ d.www }}</td></tr>{% endif %}
+        </table>
+      {% endif %}
+    {% elif r.status == "not_found" %}
+      <div class="alert alert-info">Brak wpisu w CEIDG.</div>
+    {% elif r.status == "no_token" %}
+      <div class="alert alert-info">Brak tokenu CEIDG. Ustaw zmienną środowiskową <strong>CEIDG_TOKEN</strong>.</div>
+    {% else %}
+      <div class="error-msg">{{ r.error or "Nieznany błąd" }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── KRS ───────────────────────────────────────────────────────────────── #}
+{% if "krs" in selected %}
+{% set r = results.get("krs", {}) %}
+<div class="section">
+  <div class="section-header">
+    <span class="icon">{{ modules.krs.icon }}</span>
+    <h2>{{ modules.krs.name }}</h2>
+    <span class="status-badge badge-{{ r.status }}">{{ r.status | upper }}</span>
+  </div>
+  <div class="section-body">
+    {% if r.status == "ok" and r.data %}
+      {% set d = r.data %}
+      <table class="data-table">
+        <tr><td>Nazwa</td><td>{{ d.nazwa or "—" }}</td></tr>
+        <tr><td>KRS</td><td>{{ d.krs or "—" }}</td></tr>
+        <tr><td>NIP</td><td>{{ d.nip or "—" }}</td></tr>
+        <tr><td>REGON</td><td>{{ d.regon or "—" }}</td></tr>
+        <tr><td>Forma prawna</td><td>{{ d.forma_prawna or "—" }}</td></tr>
+        <tr><td>Adres</td><td>{{ d.adres or "—" }}</td></tr>
+        {% if d.kapital_zakladowy %}<tr><td>Kapitał zakładowy</td><td>{{ d.kapital_zakladowy }}</td></tr>{% endif %}
+        {% if d.zarzad %}
+        <tr><td>Zarząd</td>
+          <td>{% for m in d.zarzad %}{{ m }}<br>{% endfor %}</td>
+        </tr>
+        {% endif %}
+      </table>
+    {% elif r.status == "not_found" %}
+      <div class="alert alert-info">Brak wpisu w KRS.</div>
+    {% elif r.status == "skipped" %}
+      <div class="alert alert-info">{{ r.error }}</div>
+    {% else %}
+      <div class="error-msg">{{ r.error or "Nieznany błąd" }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── KNF ───────────────────────────────────────────────────────────────── #}
+{% if "knf" in selected %}
+{% set r = results.get("knf", {}) %}
+<div class="section">
+  <div class="section-header">
+    <span class="icon">{{ modules.knf.icon }}</span>
+    <h2>{{ modules.knf.name }}</h2>
+    <span class="status-badge badge-{{ r.status }}">{{ r.status | upper }}</span>
+  </div>
+  <div class="section-body">
+    {% if r.status == "ok" and r.data %}
+      {% set d = r.data %}
+      {% if d.found %}
+        <div class="alert alert-danger">
+          ⚠️ Podmiot figuruje na liście ostrzeżeń publicznych KNF ({{ d.matches | length }} wpis/y)
+        </div>
+        {% for w in d.matches %}
+        <div class="warning-item" style="margin-top:8px">
+          <div class="company-name">{{ w.company }}</div>
+          <div class="meta">
+            {% if w.krs %}KRS: {{ w.krs }} · {% endif %}
+            Data: {{ w.date }} · Nr: {{ w.number }}
+          </div>
+          {% if w.description %}<div style="margin-top:4px; font-size:9pt;">{{ w.description }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="alert alert-success">
+          ✓ Podmiot nie figuruje na liście ostrzeżeń KNF (sprawdzono {{ d.total_in_list }} wpisów).
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="error-msg">{{ r.error or "Nieznany błąd" }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+{# ── UOKiK ─────────────────────────────────────────────────────────────── #}
+{% if "uokik" in selected %}
+{% set r = results.get("uokik", {}) %}
+<div class="section">
+  <div class="section-header">
+    <span class="icon">{{ modules.uokik.icon }}</span>
+    <h2>{{ modules.uokik.name }}</h2>
+    <span class="status-badge badge-{{ r.status }}">{{ r.status | upper }}</span>
+  </div>
+  <div class="section-body">
+    {% if r.status == "ok" and r.data and r.data.decisions %}
+      <div class="alert alert-danger" style="margin-bottom:12px">
+        ⚠️ Znaleziono {{ r.data.decisions | length }} decyzji UOKiK dotyczących podmiotu.
+      </div>
+      <ul class="decision-list">
+        {% for dec in r.data.decisions %}
+        <li>{{ dec.title | truncate(120) }}<br>
+          <small style="color:#718096">{{ dec.url }}</small>
+        </li>
+        {% endfor %}
+      </ul>
+    {% elif r.status == "not_found" or (r.status == "ok" and not r.data.decisions) %}
+      <div class="alert alert-success">
+        ✓ Brak decyzji UOKiK dla podanego podmiotu.
+      </div>
+    {% else %}
+      <div class="error-msg">{{ r.error or "Nieznany błąd" }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<div class="report-footer">
+  Raport wygenerowany automatycznie przez OSINT Toolkit · {{ generated_at }} ·
+  Dane pochodzą z publicznych rejestrów: CEIDG, MF/KAS, MS KRS, KNF, UOKiK.
+  Nie stanowi porady prawnej ani finansowej.
+</div>
+
+</body>
+</html>
