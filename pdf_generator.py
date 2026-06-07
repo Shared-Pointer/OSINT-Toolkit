@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from datetime import datetime
+from html import escape as _xml_escape
 from io import BytesIO
 import os
 
@@ -349,14 +350,14 @@ def _section_uokik(result: dict, styles) -> list:
             for dec in decisions[:20]:
                 title = (dec.get("title") or dec.get("url", ""))[:100]
                 url = dec.get("url", "")
-                # Klikalne linki — ReportLab <link href="..."> w Paragraph
                 link_style = ParagraphStyle("url", parent=styles["small"],
                     textColor=BLUE, fontName=FONT_REGULAR)
-                content.append(Paragraph(f"• {title}", styles["body"]))
+                content.append(Paragraph(f"• {_xml_escape(title)}", styles["body"]))
                 if url:
-                    safe_url = url.replace("&", "&amp;")
+                    safe_href = _xml_escape(url, quote=True)
+                    display = _xml_escape((url[:90] + "…") if len(url) > 90 else url)
                     content.append(Paragraph(
-                        f'<link href="{safe_url}">{url[:90]}{"…" if len(url) > 90 else ""}</link>',
+                        f'<link href="{safe_href}">{display}</link>',
                         link_style,
                     ))
                 content.append(Spacer(1, 3))
