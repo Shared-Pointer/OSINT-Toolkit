@@ -1,17 +1,20 @@
 """KNF module - lista ostrzeżeń publicznych KNF."""
 
 from __future__ import annotations
+import threading
 import time
 from typing import Optional
 
 _cache: dict = {"data": None, "ts": 0.0}
+_cache_lock = threading.Lock()
 CACHE_TTL = 3600 * 6  # 6h
 
 
 def _get_all_warnings() -> list[dict]:
     now = time.time()
-    if _cache["data"] is not None and (now - _cache["ts"]) < CACHE_TTL:
-        return _cache["data"]
+    with _cache_lock:
+        if _cache["data"] is not None and (now - _cache["ts"]) < CACHE_TTL:
+            return _cache["data"]
 
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
@@ -38,8 +41,9 @@ def _get_all_warnings() -> list[dict]:
 
     # don't cache empty results - page may not have loaded properly
     if data:
-        _cache["data"] = data
-        _cache["ts"] = now
+        with _cache_lock:
+            _cache["data"] = data
+            _cache["ts"] = now
     return data
 
 
