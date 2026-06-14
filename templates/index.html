@@ -29,17 +29,11 @@
           type="text"
           name="query"
           id="query"
-          placeholder="NIP, numer KRS lub nazwa firmy…"
+          placeholder="NIP firmy (10 cyfr)…"
           required
           autocomplete="off"
           class="query-input"
         />
-        <select name="query_type" class="type-select">
-          <option value="auto">Wykryj automatycznie</option>
-          <option value="nip">NIP</option>
-          <option value="krs">KRS</option>
-          <option value="name">Nazwa firmy</option>
-        </select>
       </div>
     </div>
 
@@ -62,10 +56,7 @@
             <div class="module-info">
               <strong>{{ mod.name }}</strong>
               <span class="module-desc">{{ mod.desc }}</span>
-              {% if mod.needs_nip %}
-              <span class="tag-nip">wymaga NIP</span>
-              {% endif %}
-            </div>
+              </div>
             <div class="checkmark">✓</div>
           </div>
         </label>

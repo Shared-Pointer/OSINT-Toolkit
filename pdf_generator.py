@@ -228,45 +228,6 @@ def _section_vat(result: dict, styles) -> list:
     return _section_box(header, content)
 
 
-def _section_ceidg(result: dict, styles) -> list:
-    status = result.get("status", "error")
-    header = _header_row("CEIDG — Jednoosobowe Działalności Gospodarcze", status, "[JDG]", styles)
-    d = result.get("data", {})
-
-    if status == "ok" and d:
-        firms = d.get("firms", [d] if "nazwa" in d else [])
-        content = [Spacer(1, 4)]
-        for firm in firms[:5]:
-            rows = [
-                ("Nazwa", firm.get("nazwa")),
-                ("NIP", firm.get("nip")),
-                ("REGON", firm.get("regon")),
-                ("Status", firm.get("status")),
-                ("Adres", firm.get("adres")),
-                ("Rozpoczęcie działalności", firm.get("data_rozpoczecia")),
-            ]
-            if firm.get("data_zawieszenia"):
-                rows.append(("Data zawieszenia", firm["data_zawieszenia"]))
-            if firm.get("data_wykreslenia"):
-                rows.append(("Data wykreślenia", firm["data_wykreslenia"]))
-            if firm.get("pkd_przewazajacy"):
-                rows.append(("PKD (przeważające)", firm["pkd_przewazajacy"]))
-            if firm.get("telefon"):
-                rows.append(("Telefon", firm["telefon"]))
-            if firm.get("email"):
-                rows.append(("E-mail", firm["email"]))
-            content.append(_data_table(rows, styles))
-            content.append(Spacer(1, 6))
-    elif status == "not_found":
-        content = [Spacer(1,6), Paragraph("Brak wpisu w CEIDG.", styles["body"]), Spacer(1,6)]
-    elif status == "no_token":
-        content = [Spacer(1,6), Paragraph("Brak tokenu CEIDG. Ustaw zmienną środowiskową CEIDG_TOKEN.", styles["body"]), Spacer(1,6)]
-    else:
-        msg = result.get("error") or "Nieznany błąd"
-        content = [Spacer(1,6), Paragraph(f"Błąd: {msg}", ParagraphStyle("err", parent=styles["body"], textColor=RED)), Spacer(1,6)]
-
-    return _section_box(header, content)
-
 
 def _section_krs(result: dict, styles) -> list:
     status = result.get("status", "error")
@@ -484,7 +445,6 @@ def _section_rekrutacje(result: dict, styles) -> list:
 
 SECTION_BUILDERS = {
     "vat": _section_vat,
-    "ceidg": _section_ceidg,
     "krs": _section_krs,
     "knf": _section_knf,
     "uokik": _section_uokik,
@@ -495,7 +455,6 @@ SECTION_BUILDERS = {
 # ── Główna funkcja ────────────────────────────────────────────────────────────
 def generate_pdf(
     query: str,
-    query_type: str,
     results: dict,
     modules_meta: dict,
     selected: list[str],
@@ -559,16 +518,14 @@ def generate_pdf(
     # ── Meta row ─────────────────────────────────────────────────────────
     generated_at = datetime.now().strftime("%d.%m.%Y %H:%M")
     meta_data = [
-        [Paragraph("Podmiot", styles["label"]),
-         Paragraph("Typ zapytania", styles["label"]),
+        [Paragraph("NIP", styles["label"]),
          Paragraph("Źródła", styles["label"]),
          Paragraph("Data", styles["label"])],
         [Paragraph(query, ParagraphStyle("q", parent=styles["value"], fontSize=11, fontName=FONT_BOLD)),
-         Paragraph(query_type, styles["value"]),
          Paragraph(str(len(selected)), styles["value"]),
          Paragraph(generated_at, styles["value"])],
     ]
-    meta_t = Table(meta_data, colWidths=[W*0.45, W*0.15, W*0.15, W*0.25])
+    meta_t = Table(meta_data, colWidths=[W*0.55, W*0.15, W*0.30])
     meta_t.setStyle(TableStyle([
         ("BACKGROUND", (0,0), (-1,0), LGRAY),
         ("BACKGROUND", (0,1), (-1,1), WHITE),
