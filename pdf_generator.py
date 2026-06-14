@@ -507,6 +507,93 @@ def _section_whois_dns(result: dict, styles) -> list:
     return _section_box(header, content)
 
 
+def _section_powiazania(result: dict, styles) -> list:
+    status = result.get("status", "error")
+    header = _header_row("Powiązania właścicielskie — Struktura KRS", status, "[POW]", styles)
+    d = result.get("data", {})
+
+    if status == "ok" and d:
+        board = d.get("board", {})
+        content = [Spacer(1, 4)]
+
+        # Nota o anonimizacji
+        content.append(Paragraph(
+            d.get("note", ""),
+            ParagraphStyle("note_rodo", parent=styles["small"], textColor=GRAY,
+                           fontName=FONT_ITALIC),
+        ))
+        content.append(Spacer(1, 8))
+
+        # Dane rejestrowe
+        reg_rows = [
+            ("Numer KRS", d.get("krs")),
+            ("Forma prawna", d.get("forma_prawna")),
+            ("Kapitał zakładowy", d.get("kapital_zakladowy")),
+        ]
+        content.append(_data_table(reg_rows, styles))
+        content.append(Spacer(1, 8))
+
+        # Struktura zarządu
+        content.append(Paragraph("Organy zarządzające", styles["section_title"]))
+        content.append(Spacer(1, 4))
+
+        organ_rows = []
+        organ_rows.append(("Organ reprezentacji", board.get("organ_reprezentacji", "—")))
+        for pos in board.get("sklad", []):
+            organ_rows.append((pos["funkcja"], f"{pos['liczba']} osob{'y' if pos['liczba'] > 1 else 'a'}"))
+        if board.get("prokurenci_liczba", 0) > 0:
+            organ_rows.append(("Prokurenci", str(board["prokurenci_liczba"])))
+        for org in board.get("organy_nadzoru", []):
+            organ_rows.append((org["nazwa"], f"{org['liczba_czlonkow']} członków"))
+
+        content.append(_data_table(organ_rows, styles))
+
+        # Sposob reprezentacji
+        if board.get("sposob_reprezentacji"):
+            content.append(Spacer(1, 6))
+            content.append(Paragraph(
+                f"Sposób reprezentacji: {board['sposob_reprezentacji'][:250]}",
+                ParagraphStyle("repr", parent=styles["small"], textColor=GRAY),
+            ))
+
+        # Oddziały
+        oddzialy_checked = d.get("oddzialy_checked", [])
+        oddzialy_total = d.get("oddzialy_total", len(oddzialy_checked))
+        if oddzialy_checked:
+            label = f"Oddziały sprawdzone w KNF ({len(oddzialy_checked)} z {oddzialy_total})"
+            content.append(Spacer(1, 10))
+            content.append(Paragraph(label, styles["section_title"]))
+            content.append(Spacer(1, 4))
+
+            branch_checks = d.get("branch_checks", {})
+            branch_rows = []
+            for name in oddzialy_checked:
+                checks = branch_checks.get(name, {})
+                flag = "⚠ UWAGA: figuruje na liście ostrzeżeń KNF" if checks.get("hit") else "brak powiązań KNF"
+                branch_rows.append((name[:70], flag))
+
+            content.append(_data_table(branch_rows, styles))
+
+        content.append(Spacer(1, 6))
+        return _section_box(header, content)
+
+    elif status == "skipped":
+        content = [Spacer(1, 6),
+                   Paragraph(result.get("error", "Pominięto."), styles["body"]),
+                   Spacer(1, 6)]
+    elif status == "not_found":
+        content = [Spacer(1, 6),
+                   Paragraph("Brak wpisu w KRS.", styles["body"]),
+                   Spacer(1, 6)]
+    else:
+        msg = result.get("error") or "Nieznany błąd"
+        content = [Spacer(1, 6),
+                   Paragraph(f"Błąd: {msg}", ParagraphStyle("err", parent=styles["body"], textColor=RED)),
+                   Spacer(1, 6)]
+
+    return _section_box(header, content)
+
+
 SECTION_BUILDERS = {
     "vat": _section_vat,
     "krs": _section_krs,
@@ -514,6 +601,7 @@ SECTION_BUILDERS = {
     "uokik": _section_uokik,
     "rekrutacje": _section_rekrutacje,
     "whois_dns": _section_whois_dns,
+    "powiazania": _section_powiazania,
 }
 
 

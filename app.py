@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from flask import Flask, render_template, request, send_file, redirect, url_for, flash
 
-from modules import vat, krs, knf, uokik, rekrutacje, whois_dns
+from modules import vat, krs, knf, uokik, rekrutacje, whois_dns, powiazania
 from pdf_generator import generate_pdf
 
 
@@ -69,6 +69,12 @@ MODULES = {
         "icon": "🌐",
         "fn": whois_dns.run,
     },
+    "powiazania": {
+        "name": "Powiązania właścicielskie",
+        "desc": "Struktura zarządu, prokurenci, oddziały (KRS)",
+        "icon": "🔗",
+        "fn": powiazania.run,
+    },
 }
 
 
@@ -123,6 +129,8 @@ def generate():
             if not domain:
                 return {"status": "skipped", "error": "Nie podano domeny — wpisz adres strony firmy.", "data": {}}
             return whois_dns.run(domain)
+        if name == "powiazania":
+            return powiazania.run(query, "nip")
         if name in NAME_MODULES:
             if not company_name:
                 return {"status": "skipped", "error": "Brak nazwy firmy — moduł VAT nie zwrócił danych.", "data": {}}
