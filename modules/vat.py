@@ -1,4 +1,4 @@
-"""VAT module — Wykaz Podatników VAT (MF/KAS)."""
+"""VAT scraper - Wykaz Podatników VAT (MF/KAS)."""
 
 from __future__ import annotations
 import re
@@ -12,7 +12,7 @@ import requests
 PROD_URL = "https://wl-api.mf.gov.pl"
 
 
-# ── Models ──────────────────────────────────────────────────────────────────
+# Models
 
 @dataclass
 class EntityPerson:
@@ -101,7 +101,7 @@ class WykazPodatnikowVATClient:
         return Entity.from_dict(subject) if subject else None
 
 
-# ── Module interface ─────────────────────────────────────────────────────────
+# Module interface
 
 def _is_nip(q: str) -> bool:
     return q.replace("-", "").replace(" ", "").isdigit() and len(q.replace("-", "").replace(" ", "")) == 10

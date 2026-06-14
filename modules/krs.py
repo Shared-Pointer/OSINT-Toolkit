@@ -1,4 +1,4 @@
-"""KRS module — api-krs.ms.gov.pl REST API."""
+"""KRS module - api-krs.ms.gov.pl REST API."""
 
 from __future__ import annotations
 import re
@@ -65,7 +65,7 @@ def _parse(dane: dict, krs: str) -> dict:
     }
 
 
-# ── Module interface ──────────────────────────────────────────────────────────
+# Module interface
 
 def run(query: str, query_type: str = "nip") -> dict:
     nip = re.sub(r"[\s\-]", "", query)

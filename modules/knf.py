@@ -1,4 +1,4 @@
-"""KNF module — Lista Ostrzeżeń Publicznych KNF (Komisja Nadzoru Finansowego)."""
+"""KNF module - lista ostrzeżeń publicznych KNF."""
 
 from __future__ import annotations
 import time
@@ -52,7 +52,7 @@ def _filter(warnings: list[dict], query: str) -> list[dict]:
     return matched
 
 
-# ── Module interface ─────────────────────────────────────────────────────────
+# Module interface
 
 def run(query: str, query_type: str = "auto") -> dict:
     try:

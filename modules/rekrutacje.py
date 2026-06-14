@@ -1,4 +1,4 @@
-"""Rekrutacje module — oferty pracy z pracuj.pl, NoFluffJobs, JustJoin.it."""
+"""Rekrutacje module - job listings from pracuj.pl, NoFluffJobs, JustJoin.it."""
 
 from __future__ import annotations
 import json
@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
 from urllib.parse import quote
 
 
-# ── pracuj.pl ─────────────────────────────────────────────────────────────────
+# pracuj.pl
 
 def _scrape_pracujpl(keyword: str, days_back: int = 30) -> list[dict]:
     from playwright.sync_api import sync_playwright
@@ -88,7 +88,7 @@ def _parse_pracujpl(html: str, keyword: str) -> list[dict]:
     return offers
 
 
-# ── NoFluffJobs ───────────────────────────────────────────────────────────────
+# NoFluffJobs
 
 def _scrape_nofluffjobs(keyword: str) -> list[dict]:
     from playwright.sync_api import sync_playwright
@@ -134,10 +134,10 @@ def _scrape_nofluffjobs(keyword: str) -> list[dict]:
     return offers
 
 
-# ── JustJoin.it ───────────────────────────────────────────────────────────────
+# JustJoin.it
 
 def _fetch_justjoinit(keyword: str) -> list[dict]:
-    """REST API JustJoin.it — bez Playwright."""
+    """JustJoin.it via REST API (no Playwright)."""
     import requests as _req
 
     headers = {
@@ -145,28 +145,26 @@ def _fetch_justjoinit(keyword: str) -> list[dict]:
         "Accept": "application/json",
     }
 
-    # Znajdz dokladna nazwe firmy przez suggest
+    # resolve exact company name via suggest endpoint
     suggest = _req.get(
         f"https://justjoin.it/api/candidate-api/offers/suggest?search={quote(keyword)}&keywordType=any",
         headers=headers, timeout=10,
     ).json()
     companies = suggest.get("companies", [])
 
-    # Wybierz firme ktora najlepiej pasuje do keyword (case-insensitive contains)
     kw_lower = keyword.lower()
     matched_company = next(
         (c for c in companies if kw_lower in c.lower()),
         keyword,
     )
 
-    # Pobierz oferty filtrowane po nazwie firmy
     resp = _req.get(
         f"https://justjoin.it/api/candidate-api/offers?companyName={quote(matched_company)}&pageSize=50",
         headers=headers, timeout=15,
     )
     data = resp.json().get("data", [])
 
-    # Filtruj client-side — tylko oferty tej firmy
+    # filter client-side to exact company
     offers = []
     for o in data:
         if kw_lower not in (o.get("companyName") or "").lower():
@@ -198,7 +196,7 @@ def _scrape_justjoinit(keyword: str) -> list[dict]:
     return _fetch_justjoinit(keyword)
 
 
-# ── Module interface ──────────────────────────────────────────────────────────
+# Module interface
 
 def _is_nip(q: str) -> bool:
     d = q.replace("-", "").replace(" ", "")
@@ -243,7 +241,7 @@ def run(query: str, query_type: str = "auto") -> dict:
             except Exception as e:
                 source_stats[name] = {"count": 0, "error": str(e)}
 
-    # Fallback: jeśli skrócona nazwa nic nie dała — spróbuj oryginalną na pracuj.pl
+    # fallback: if shortened name returned nothing, try original on pracuj.pl
     if not all_offers and search_query != query:
         try:
             fallback = _scrape_pracujpl(query)

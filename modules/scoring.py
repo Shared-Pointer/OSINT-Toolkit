@@ -1,4 +1,4 @@
-"""Scoring ryzyka — agregacja wyników modułów w wskaźnik 0–100."""
+"""Risk scoring - aggregate module results into a 0-100 score."""
 
 from __future__ import annotations
 
@@ -23,14 +23,11 @@ LEVEL_THRESHOLDS = [
 
 
 def calculate(results: dict) -> dict:
-    """
-    Oblicza score ryzyka na podstawie słownika results (klucz = nazwa modułu).
-    Zwraca dict z: score (int), level (str), color (str), reasons (list[str]).
-    """
+    """Calculate risk score from module results. Returns score, level, color, reasons."""
     score = 100
     reasons: list[str] = []
 
-    # ── VAT ──────────────────────────────────────────────────────────────────
+    # VAT
     vat = results.get("vat", {})
     if vat.get("status") == "ok":
         status_vat = (vat.get("data", {}).get("status_vat") or "").lower()
@@ -41,7 +38,7 @@ def calculate(results: dict) -> dict:
             score += WEIGHTS["vat_niezarejestr"]
             reasons.append("Podmiot niezarejestrowany jako podatnik VAT")
 
-    # ── KNF ──────────────────────────────────────────────────────────────────
+    # KNF
     knf = results.get("knf", {})
     if knf.get("status") == "ok":
         warnings = knf.get("data", {}).get("warnings", [])
@@ -49,7 +46,7 @@ def calculate(results: dict) -> dict:
             score += WEIGHTS["knf_hit"]
             reasons.append(f"Podmiot figuruje na liście ostrzeżeń KNF ({len(warnings)} wpis/ów)")
 
-    # ── UOKiK ────────────────────────────────────────────────────────────────
+    # UOKiK
     uokik = results.get("uokik", {})
     if uokik.get("status") == "ok":
         decisions = uokik.get("data", {}).get("decisions", [])
@@ -58,13 +55,13 @@ def calculate(results: dict) -> dict:
             score += penalty
             reasons.append(f"Znaleziono {len(decisions)} decyzji UOKiK dotyczących podmiotu")
 
-    # ── KRS ──────────────────────────────────────────────────────────────────
+    # KRS
     krs = results.get("krs", {})
     if krs.get("status") in ("not_found", "skipped", "error"):
         score += WEIGHTS["no_krs"]
         reasons.append("Brak wpisu w KRS (podmiot nie jest spółką)")
 
-    # ── Powiązania — oddziały w KNF ──────────────────────────────────────────
+    # Powiązania - branch KNF check
     pow_data = results.get("powiazania", {}).get("data", {})
     branch_checks = pow_data.get("branch_checks", {})
     branch_hits = [n for n, c in branch_checks.items() if c.get("hit")]
@@ -72,7 +69,7 @@ def calculate(results: dict) -> dict:
         score += WEIGHTS["branch_knf_hit"]
         reasons.append(f"Oddział figuruje na liście ostrzeżeń KNF: {branch_hits[0][:50]}")
 
-    # ── WHOIS / DNS ──────────────────────────────────────────────────────────
+    # WHOIS / DNS
     dns_data = results.get("whois_dns", {}).get("data", {})
     if dns_data:
         whois_info = dns_data.get("whois", {})

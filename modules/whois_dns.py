@@ -1,4 +1,4 @@
-"""WHOIS/DNS module — rejestracja domeny i rekordy DNS."""
+"""WHOIS/DNS module - domain registration and DNS records."""
 
 from __future__ import annotations
 import re
@@ -14,7 +14,7 @@ def _normalize_domain(raw: str) -> str:
     raw = raw.strip().lower()
     raw = re.sub(r"https?://", "", raw)
     raw = re.sub(r"/.*", "", raw)
-    # Stripuj www. — SPF/DMARC są zawsze na domenie apex, nie na www
+    # strip www. - SPF/DMARC live on the apex domain
     raw = re.sub(r"^www\.", "", raw)
     return raw
 
@@ -64,7 +64,7 @@ def _get_whois(domain: str) -> dict:
 def _get_dns(domain: str) -> dict:
     result = {}
 
-    # A record
+    # A records
     try:
         answers = dns.resolver.resolve(domain, "A")
         result["a_records"] = [str(r) for r in answers]
@@ -81,7 +81,7 @@ def _get_dns(domain: str) -> dict:
     except Exception:
         result["mx_records"] = []
 
-    # SPF (TXT records)
+    # SPF
     spf = None
     try:
         answers = dns.resolver.resolve(domain, "TXT")
@@ -107,7 +107,7 @@ def _get_dns(domain: str) -> dict:
         pass
     result["dmarc"] = dmarc
 
-    # Flagi bezpieczeństwa
+    # security flags
     result["has_spf"] = spf is not None
     result["has_dmarc"] = dmarc is not None
     result["phishing_risk"] = not spf or not dmarc
@@ -115,7 +115,7 @@ def _get_dns(domain: str) -> dict:
     return result
 
 
-# ── Module interface ──────────────────────────────────────────────────────────
+# Module interface
 
 def run(domain: str, query_type: str = "domain") -> dict:
     domain = _normalize_domain(domain)

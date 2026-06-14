@@ -1,4 +1,4 @@
-"""UOKiK module — wrapper wokół istniejącego scrapera decyzji UOKiK."""
+"""UOKiK module - scraper decyzji UOKiK."""
 
 from __future__ import annotations
 import html
@@ -119,7 +119,7 @@ def search(query: str) -> list[dict]:
     return []
 
 
-# ── Module interface ─────────────────────────────────────────────────────────
+# Module interface
 
 _LEGAL_SUFFIXES = re.compile(
     r"\b(SPÓŁKA AKCYJNA|SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ|SPÓŁKA JAWNA|"
@@ -131,18 +131,16 @@ _LEGAL_SUFFIXES = re.compile(
 
 
 def _shorten_name(name: str) -> str:
-    """Wyciąga rdzeń nazwy firmy — usuwa formę prawną i nadmiarowe słowa."""
+    """Strip legal suffix, return first 2-3 words."""
     short = _LEGAL_SUFFIXES.sub("", name).strip(" ,.-")
-    # Jeśli po usunięciu zostaje tylko jedno słowo, użyj go
     words = short.split()
     if not words:
         return name
-    # Bierz pierwsze 2-3 znaczące słowa
     return " ".join(words[:3])
 
 
 def _verify_decision(url: str, nip_clean: str, regon_clean: str) -> bool:
-    """Sprawdza czy strona decyzji zawiera NIP lub REGON podmiotu. Fail-open przy błędach."""
+    """Check if a decision page mentions the NIP or REGON. Fail open on errors."""
     try:
         resp = requests.get(
             url,
@@ -162,7 +160,7 @@ def _verify_decision(url: str, nip_clean: str, regon_clean: str) -> bool:
 
 
 def _filter_by_nip_regon(results: list[dict], nip: str, regon: str) -> list[dict]:
-    """Filtruje wyniki — zachowuje decyzje, w których treści pojawia się NIP lub REGON."""
+    """Filter to decisions that mention the NIP or REGON."""
     nip_clean = re.sub(r"[\s\-]", "", nip) if nip else ""
     regon_clean = re.sub(r"[\s\-]", "", regon) if regon else ""
     if not nip_clean and not regon_clean:
@@ -179,7 +177,7 @@ def _filter_by_nip_regon(results: list[dict], nip: str, regon: str) -> list[dict
             try:
                 verified[url] = future.result()
             except Exception:
-                verified[url] = True  # fail-open
+                verified[url] = True  # fail open
 
     return [r for r in results if verified.get(r["url"], True)]
 
