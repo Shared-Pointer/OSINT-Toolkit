@@ -126,11 +126,17 @@ def generate():
         if name == "powiazania":
             return powiazania.run(query, "nip")
         if name in NAME_MODULES:
-            if not company_name:
-                return {"status": "skipped", "error": "Brak nazwy firmy — moduł VAT nie zwrócił danych.", "data": {}}
+            if name == "rekrutacje":
+                if not company_name:
+                    return {"status": "skipped", "error": "Brak nazwy firmy — moduł VAT nie zwrócił danych.", "data": {}}
+                return MODULES["rekrutacje"]["fn"](company_name, "name")
+            # KNF i UOKiK: jeśli VAT nie dał nazwy, szukaj po NIP bezpośrednio
+            # KNF sprawdza NIP w polu KRS na liście ostrzeżeń, więc działa
+            search_q = company_name if company_name else query
+            search_type = "name" if company_name else "nip"
             if name == "uokik":
-                return uokik.run(company_name, "name", nip=nip_for_uokik, regon=regon_for_uokik)
-            return MODULES[name]["fn"](company_name, "name")
+                return uokik.run(search_q, search_type, nip=nip_for_uokik or query, regon=regon_for_uokik)
+            return MODULES[name]["fn"](search_q, search_type)
         return MODULES[name]["fn"](query, "nip")
 
     remaining = [n for n in selected if n not in results]
