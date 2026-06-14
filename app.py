@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from flask import Flask, render_template, request, send_file, redirect, url_for, flash
 
-from modules import vat, krs, knf, uokik, rekrutacje
+from modules import vat, krs, knf, uokik, rekrutacje, whois_dns
 from pdf_generator import generate_pdf
 
 
@@ -63,6 +63,12 @@ MODULES = {
         "icon": "💼",
         "fn": rekrutacje.run,
     },
+    "whois_dns": {
+        "name": "WHOIS / DNS",
+        "desc": "Rejestracja domeny, rekordy MX/SPF/DMARC",
+        "icon": "🌐",
+        "fn": whois_dns.run,
+    },
 }
 
 
@@ -74,6 +80,7 @@ def index():
 @app.route("/generate", methods=["POST"])
 def generate():
     query = re.sub(r"[\s\-]", "", request.form.get("query", "").strip())
+    domain = request.form.get("domain", "").strip()
     selected = request.form.getlist("modules")
 
     if not query:
@@ -112,6 +119,10 @@ def generate():
     def _run_module(name: str):
         if name == "vat":
             return MODULES["vat"]["fn"](query, "nip")
+        if name == "whois_dns":
+            if not domain:
+                return {"status": "skipped", "error": "Nie podano domeny — wpisz adres strony firmy.", "data": {}}
+            return whois_dns.run(domain)
         if name in NAME_MODULES:
             if not company_name:
                 return {"status": "skipped", "error": "Brak nazwy firmy — moduł VAT nie zwrócił danych.", "data": {}}

@@ -443,12 +443,60 @@ def _section_rekrutacje(result: dict, styles) -> list:
     return _section_box(header, content)
 
 
+def _section_whois_dns(result: dict, styles) -> list:
+    status = result.get("status", "error")
+    header = _header_row("WHOIS / DNS — Analiza Domeny", status, "[DNS]", styles)
+    d = result.get("data", {})
+
+    if status == "ok" and d:
+        w = d.get("whois", {})
+        dns = d.get("dns", {})
+
+        whois_rows = [
+            ("Domena", d.get("domain")),
+            ("Registrar", w.get("registrar")),
+            ("Data rejestracji", w.get("creation_date")),
+            ("Data wygaśnięcia", w.get("expiration_date")),
+            ("Właściciel / Org", w.get("registrant")),
+            ("Kraj rejestracji", w.get("country")),
+        ]
+        if w.get("is_new"):
+            whois_rows.append(("⚠ UWAGA", "Domena zarejestrowana mniej niż 30 dni temu"))
+        if w.get("expires_soon"):
+            whois_rows.append(("⚠ UWAGA", "Domena wygasa w ciągu 30 dni"))
+
+        dns_rows = [
+            ("Adresy IP (A)", ", ".join(dns.get("a_records", [])) or "brak"),
+            ("Serwery MX", "\n".join(dns.get("mx_records", [])) or "brak"),
+            ("SPF", dns.get("spf") or "❌ BRAK — ryzyko phishingu"),
+            ("DMARC", dns.get("dmarc") or "❌ BRAK — ryzyko phishingu"),
+        ]
+
+        content = [
+            Spacer(1, 4),
+            Paragraph("WHOIS", styles["section_title"]),
+            _data_table(whois_rows, styles),
+            Spacer(1, 8),
+            Paragraph("DNS", styles["section_title"]),
+            _data_table(dns_rows, styles),
+            Spacer(1, 6),
+        ]
+    elif status == "skipped":
+        content = [Spacer(1, 6), Paragraph(result.get("error", "Pominięto."), styles["body"]), Spacer(1, 6)]
+    else:
+        msg = result.get("error") or "Nieznany błąd"
+        content = [Spacer(1, 6), Paragraph(f"Błąd: {msg}", ParagraphStyle("err", parent=styles["body"], textColor=RED)), Spacer(1, 6)]
+
+    return _section_box(header, content)
+
+
 SECTION_BUILDERS = {
     "vat": _section_vat,
     "krs": _section_krs,
     "knf": _section_knf,
     "uokik": _section_uokik,
     "rekrutacje": _section_rekrutacje,
+    "whois_dns": _section_whois_dns,
 }
 
 

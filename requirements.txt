@@ -4,3 +4,5 @@ requests>=2.31
 beautifulsoup4>=4.12
 lxml>=5.0
 playwright>=1.44
+python-whois>=0.9
+dnspython>=2.6
