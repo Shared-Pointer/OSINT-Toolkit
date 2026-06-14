@@ -41,10 +41,11 @@ def calculate(results: dict) -> dict:
     # KNF
     knf = results.get("knf", {})
     if knf.get("status") == "ok":
-        warnings = knf.get("data", {}).get("warnings", [])
-        if warnings:
+        knf_data = knf.get("data", {})
+        matches = knf_data.get("matches", [])
+        if matches or knf_data.get("found"):
             score += WEIGHTS["knf_hit"]
-            reasons.append(f"Podmiot figuruje na liście ostrzeżeń KNF ({len(warnings)} wpis/ów)")
+            reasons.append(f"Podmiot figuruje na liście ostrzeżeń KNF ({len(matches)} wpis/ów)")
 
     # UOKiK
     uokik = results.get("uokik", {})
