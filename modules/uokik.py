@@ -4,6 +4,7 @@ from __future__ import annotations
 import html
 import re
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
 from urllib.parse import parse_qs, unquote, urljoin, urlparse
 import base64
 
@@ -140,17 +141,65 @@ def _shorten_name(name: str) -> str:
     return " ".join(words[:3])
 
 
-def run(query: str, query_type: str = "auto") -> dict:
+def _verify_decision(url: str, nip_clean: str, regon_clean: str) -> bool:
+    """Sprawdza czy strona decyzji zawiera NIP lub REGON podmiotu. Fail-open przy błędach."""
     try:
-        # Spróbuj pełną nazwą, potem skróconą jeśli brak wyników
+        resp = requests.get(
+            url,
+            headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "pl-PL,pl;q=0.9"},
+            timeout=15,
+        )
+        if not resp.ok:
+            return True
+        text = re.sub(r"[\s\-]", "", resp.text)
+        if nip_clean and nip_clean in text:
+            return True
+        if regon_clean and regon_clean in text:
+            return True
+        return False
+    except Exception:
+        return True
+
+
+def _filter_by_nip_regon(results: list[dict], nip: str, regon: str) -> list[dict]:
+    """Filtruje wyniki — zachowuje decyzje, w których treści pojawia się NIP lub REGON."""
+    nip_clean = re.sub(r"[\s\-]", "", nip) if nip else ""
+    regon_clean = re.sub(r"[\s\-]", "", regon) if regon else ""
+    if not nip_clean and not regon_clean:
+        return results
+
+    verified: dict[str, bool] = {}
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {
+            executor.submit(_verify_decision, r["url"], nip_clean, regon_clean): r["url"]
+            for r in results
+        }
+        for future in _as_completed(futures):
+            url = futures[future]
+            try:
+                verified[url] = future.result()
+            except Exception:
+                verified[url] = True  # fail-open
+
+    return [r for r in results if verified.get(r["url"], True)]
+
+
+def run(query: str, query_type: str = "auto", nip: str = "", regon: str = "") -> dict:
+    try:
         results = search(query)
         if not results and len(query.split()) > 2:
             short = _shorten_name(query)
             if short.lower() != query.lower():
                 results = search(short)
+
+        results = results[:20]
+
+        if results and (nip or regon):
+            results = _filter_by_nip_regon(results, nip, regon)
+
         return {
             "status": "ok" if results else "not_found",
-            "data": {"decisions": results[:20]},
+            "data": {"decisions": results},
         }
     except Exception as e:
         return {"status": "error", "error": str(e), "data": {}}
