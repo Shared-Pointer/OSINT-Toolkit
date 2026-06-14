@@ -84,7 +84,6 @@ header .subtitle { color: #718096; margin-top: 6px; font-size: 1rem; }
   background: #16163a;
 }
 
-.module-icon { font-size: 1.4rem; flex-shrink: 0; }
 
 .module-info { flex: 1; min-width: 0; }
 .module-info strong { display: block; font-size: 0.9rem; color: #e2e8f0; margin-bottom: 2px; }
@@ -126,7 +125,6 @@ header .subtitle { color: #718096; margin-top: 6px; font-size: 1rem; }
 .btn-generate:hover { background: #3651d4; }
 .btn-generate:active { transform: scale(0.98); }
 .btn-generate:disabled { background: #4a5568; cursor: not-allowed; }
-.btn-icon { font-size: 1.1rem; }
 
 .hint { color: #4a5568; font-size: 0.82rem; margin-top: 10px; }
 

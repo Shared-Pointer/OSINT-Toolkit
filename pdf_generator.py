@@ -1,4 +1,4 @@
-"""PDF generator — buduje raport przy użyciu ReportLab."""
+"""PDF generator - builds the report using ReportLab."""
 
 from __future__ import annotations
 from datetime import datetime
@@ -19,7 +19,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 
-# ── Rejestracja fontów z polskimi znakami ────────────────────────────────────
+# Font registration (Polish characters)
 def _register_fonts():
     # Ścieżka do fontów bundlowanych z projektem (static/fonts/)
     _here = os.path.dirname(os.path.abspath(__file__))
@@ -27,13 +27,13 @@ def _register_fonts():
     rl_fonts_dir = os.path.dirname(pdfmetrics.__file__).replace("pdfbase", "fonts")
 
     candidates_regular = [
-        os.path.join(bundled, "DejaVuSans.ttf"),           # bundlowany w projekcie (zawsze)
+        os.path.join(bundled, "DejaVuSans.ttf"),           # bundled in project
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", # Linux
         "/Library/Fonts/Arial Unicode.ttf",                # macOS fallback
         "C:/Windows/Fonts/arialuni.ttf",
         "C:/Windows/Fonts/arial.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        os.path.join(rl_fonts_dir, "Vera.ttf"),            # ostateczny fallback (brak PL)
+        os.path.join(rl_fonts_dir, "Vera.ttf"),            # last resort (no PL chars)
     ]
     candidates_bold = [
         os.path.join(bundled, "DejaVuSans-Bold.ttf"),
@@ -59,10 +59,10 @@ def _register_fonts():
 _UNICODE_FONTS = _register_fonts()
 FONT_REGULAR = "UniFont" if _UNICODE_FONTS else FONT_REGULAR
 FONT_BOLD    = "UniFont-Bold" if _UNICODE_FONTS else FONT_BOLD
-FONT_ITALIC  = FONT_REGULAR  # Vera nie ma oddzielnego oblique
+FONT_ITALIC  = FONT_REGULAR  # no separate oblique variant
 
 
-# ── Kolory ───────────────────────────────────────────────────────────────────
+# Colors
 NAVY   = colors.HexColor("#1a1a2e")
 BLUE   = colors.HexColor("#4361ee")
 GREEN  = colors.HexColor("#38a169")
@@ -73,7 +73,7 @@ LGRAY  = colors.HexColor("#f7fafc")
 WHITE  = colors.white
 
 
-# ── Style ────────────────────────────────────────────────────────────────────
+# Styles
 def _build_styles():
     base = getSampleStyleSheet()
     S = {}
@@ -105,7 +105,7 @@ def _build_styles():
     return S
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# Helpers
 def _header_row(text: str, status: str, icon: str, styles) -> Table:
     STATUS_COLORS = {
         "ok": colors.HexColor("#48bb78"),
@@ -154,7 +154,7 @@ def _header_row(text: str, status: str, icon: str, styles) -> Table:
 
 
 def _data_table(rows: list[tuple[str, str]], styles) -> Table:
-    """Tabela key-value z naprzemiennym tłem."""
+    """Key-value table with alternating row background."""
     data = []
     for label, value in rows:
         if not value or value in ("—", "None", None):
@@ -175,7 +175,7 @@ def _data_table(rows: list[tuple[str, str]], styles) -> Table:
         ("RIGHTPADDING", (1,0), (-1,-1), 12),
         ("LINEBELOW", (0,0), (-1,-2), 0.3, colors.HexColor("#e2e8f0")),
     ]
-    # Naprzemienne tło — tylko dla istniejących wierszy
+    # alternating row background
     for i in range(1, len(data), 2):
         ts.append(("BACKGROUND", (0, i), (-1, i), LGRAY))
     t.setStyle(TableStyle(ts))
@@ -183,11 +183,11 @@ def _data_table(rows: list[tuple[str, str]], styles) -> Table:
 
 
 def _section_box(header_table, content_flowables):
-    """Zwraca header + content jako listę flowables (bez zewnętrznej tabeli — pozwala na podział stron)."""
+    """Return header + content as a flat flowable list (no outer table, so pages can break)."""
     return [header_table] + content_flowables + [Spacer(1, 14)]
 
 
-# ── Budowanie sekcji ─────────────────────────────────────────────────────────
+# Section builders
 def _section_vat(result: dict, styles) -> list:
     status = result.get("status", "error")
     header = _header_row("Wykaz Podatników VAT (MF/KAS)", status, "[VAT]", styles)
@@ -605,7 +605,7 @@ SECTION_BUILDERS = {
 }
 
 
-# ── Główna funkcja ────────────────────────────────────────────────────────────
+# Main entry point
 def generate_pdf(
     query: str,
     results: dict,
@@ -653,7 +653,7 @@ def generate_pdf(
 
     story = []
 
-    # ── Cover block ──────────────────────────────────────────────────────
+    # cover block
     cover = Table([
         [Paragraph("OSINT Toolkit", styles["title"])],
         [Paragraph("Raport Wywiadowczy — Publiczne Rejestry Gospodarcze", styles["subtitle"])],
@@ -669,7 +669,7 @@ def generate_pdf(
     story.append(cover)
     story.append(Spacer(1, 12))
 
-    # ── Meta row ─────────────────────────────────────────────────────────
+    # meta row
     generated_at = datetime.now().strftime("%d.%m.%Y %H:%M")
     meta_data = [
         [Paragraph("NIP", styles["label"]),
@@ -693,7 +693,7 @@ def generate_pdf(
     story.append(meta_t)
     story.append(Spacer(1, 16))
 
-    # ── Scoring ryzyka ────────────────────────────────────────────────────
+    # risk scoring block
     if scoring:
         sc = scoring["score"]
         sc_color = colors.HexColor(scoring["color"])
@@ -741,7 +741,7 @@ def generate_pdf(
 
         story.append(Spacer(1, 16))
 
-    # ── Sekcje modułów ────────────────────────────────────────────────────
+    # module sections
     for mod_key in selected:
         if mod_key not in results:
             continue

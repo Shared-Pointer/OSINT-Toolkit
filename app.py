@@ -1,4 +1,4 @@
-"""OSINT Toolkit — Flask app."""
+"""OSINT Toolkit - Flask app."""
 
 import io
 import re
@@ -17,7 +17,7 @@ def _is_nip(q: str) -> bool:
 
 
 def _shorten_for_search(name: str) -> str:
-    """Usuwa formę prawną i zostawia max 3 pierwsze słowa do wyszukiwania."""
+    """Strip legal suffix, keep first 3 words."""
     import re as _re
     suffixes = _re.compile(
         r"\b(SPÓŁKA AKCYJNA|SPÓŁKA Z OGRANICZONĄ ODPOWIEDZIALNOŚCIĄ|"
@@ -37,43 +37,36 @@ MODULES = {
     "vat": {
         "name": "Wykaz Podatników VAT",
         "desc": "Status VAT, rachunki bankowe (MF/KAS)",
-        "icon": "🏦",
         "fn": vat.run,
     },
     "krs": {
         "name": "KRS",
-        "desc": "Krajowy Rejestr Sądowy — spółki (MS)",
-        "icon": "🏛️",
+        "desc": "Krajowy Rejestr Sadowy - spolki (MS)",
         "fn": krs.run,
     },
     "knf": {
         "name": "KNF Ostrzeżenia",
         "desc": "Lista ostrzeżeń publicznych KNF",
-        "icon": "⚠️",
         "fn": knf.run,
     },
     "uokik": {
         "name": "UOKiK",
         "desc": "Decyzje Urzędu Ochrony Konkurencji i Konsumentów",
-        "icon": "⚖️",
         "fn": uokik.run,
     },
     "rekrutacje": {
         "name": "Rekrutacje",
         "desc": "Aktywne oferty pracy firmy (pracuj.pl, NoFluffJobs, JustJoin.it)",
-        "icon": "💼",
         "fn": rekrutacje.run,
     },
     "whois_dns": {
         "name": "WHOIS / DNS",
         "desc": "Rejestracja domeny, rekordy MX/SPF/DMARC",
-        "icon": "🌐",
         "fn": whois_dns.run,
     },
     "powiazania": {
         "name": "Powiązania właścicielskie",
         "desc": "Struktura zarządu, prokurenci, oddziały (KRS)",
-        "icon": "🔗",
         "fn": powiazania.run,
     },
 }
@@ -109,7 +102,7 @@ def generate():
 
     NAME_MODULES = {"knf", "uokik", "rekrutacje"}
 
-    # Pobierz nazwę firmy z VAT — potrzebna dla modułów name-based
+    # get company name from VAT - needed for name-based modules
     if any(m in selected for m in NAME_MODULES):
         try:
             vat_result = vat.run(query, "nip")

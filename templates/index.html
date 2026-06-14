@@ -9,8 +9,8 @@
 <body>
 <div class="container">
   <header>
-    <h1>🔍 OSINT Toolkit</h1>
-    <p class="subtitle">Wywiad gospodarczy — generuj raporty PDF z wielu źródeł naraz</p>
+    <h1>OSINT Toolkit</h1>
+    <p class="subtitle">Wywiad gospodarczy - generuj raporty PDF z wielu źródeł naraz</p>
   </header>
 
   {% with messages = get_flashed_messages() %}
@@ -40,7 +40,7 @@
           type="text"
           name="domain"
           id="domain"
-          placeholder="Domena firmy (opcjonalnie, np. firma.pl) — wymagana dla modułu WHOIS/DNS"
+          placeholder="Domena firmy (opcjonalnie, np. firma.pl) - wymagana dla modułu WHOIS/DNS"
           autocomplete="off"
           class="query-input domain-input"
         />
@@ -62,7 +62,6 @@
         <label class="module-item" for="mod_{{ key }}">
           <input type="checkbox" name="modules" value="{{ key }}" id="mod_{{ key }}" checked>
           <div class="module-box">
-            <span class="module-icon">{{ mod.icon }}</span>
             <div class="module-info">
               <strong>{{ mod.name }}</strong>
               <span class="module-desc">{{ mod.desc }}</span>
@@ -76,7 +75,6 @@
 
     <div class="actions">
       <button type="submit" class="btn-generate" id="submitBtn">
-        <span class="btn-icon">📄</span>
         Generuj raport PDF
       </button>
       <p class="hint">Raport zostanie wygenerowany i pobrany automatycznie.</p>
@@ -94,7 +92,7 @@ function selectNone() {
 
 document.getElementById('mainForm').addEventListener('submit', function() {
   const btn = document.getElementById('submitBtn');
-  btn.textContent = '⏳ Generowanie…';
+  btn.textContent = 'Generowanie...';
   btn.disabled = true;
 });
 </script>

@@ -1,4 +1,4 @@
-"""Powiązania właścicielskie — struktura zarządu i powiązane podmioty z KRS."""
+"""Powiązania właścicielskie - struktura zarządu i oddziały z KRS."""
 
 from __future__ import annotations
 import re
@@ -11,7 +11,7 @@ KRS_API = "https://api-krs.ms.gov.pl/api/krs/OdpisAktualny"
 
 
 def _get_krs_number(nip: str) -> str | None:
-    """Pobiera numer KRS na podstawie NIP z VAT API."""
+    """Look up KRS number from VAT API."""
     try:
         from datetime import date
         r = requests.get(
@@ -28,7 +28,7 @@ def _get_krs_number(nip: str) -> str | None:
 
 
 def _fetch_krs_data(krs: str) -> dict | None:
-    """Pobiera odpis aktualny z KRS API."""
+    """Fetch current extract from KRS API."""
     try:
         r = requests.get(f"{KRS_API}/{krs.zfill(10)}?rejestr=P&format=json", timeout=15)
         if not r.ok:
@@ -41,7 +41,7 @@ def _fetch_krs_data(krs: str) -> dict | None:
 
 
 def _parse_board(dane: dict) -> dict:
-    """Wyciąga strukturę zarządu, prokurentów i rady nadzorczej."""
+    """Parse board, prokurenci, and supervisory board from KRS data."""
     dzial2 = dane.get("dzial2", {})
     repr_section = dzial2.get("reprezentacja", {})
 
@@ -69,7 +69,7 @@ def _parse_board(dane: dict) -> dict:
 
 
 def _parse_company(dane: dict) -> dict:
-    """Wyciąga dane rejestrowe i oddziały spółki."""
+    """Parse company registration data and branches."""
     dzial1 = dane.get("dzial1", {})
     podmiot = dzial1.get("danePodmiotu", {})
     kapital = dzial1.get("kapital", {})
@@ -87,7 +87,7 @@ def _parse_company(dane: dict) -> dict:
 
 
 def _check_entity_in_knf(name: str) -> dict:
-    """Sprawdza nazwę podmiotu w KNF (tylko KNF — UOKiK bez NIP generuje fałszywe trafienia)."""
+    """Check entity name against KNF warnings list (not UOKiK - too many false positives without NIP)."""
     from modules import knf
     try:
         r = knf.run(name, "name")
@@ -97,13 +97,12 @@ def _check_entity_in_knf(name: str) -> dict:
         return {"status": "error", "error": str(e), "hit": False}
 
 
-# ── Module interface ──────────────────────────────────────────────────────────
+# Module interface
 
 def run(query: str, query_type: str = "nip") -> dict:
     nip = re.sub(r"[\s\-]", "", query)
 
     try:
-        # Znajdz numer KRS przez VAT API
         krs = _get_krs_number(nip)
         if not krs:
             return {
@@ -112,7 +111,6 @@ def run(query: str, query_type: str = "nip") -> dict:
                 "data": {},
             }
 
-        # Pobierz odpis z KRS
         dane = _fetch_krs_data(krs)
         if not dane:
             return {"status": "not_found", "data": {"krs": krs}}
@@ -120,7 +118,6 @@ def run(query: str, query_type: str = "nip") -> dict:
         board = _parse_board(dane)
         company = _parse_company(dane)
 
-        # Sprawdz oddzialy w KNF (tylko KNF — UOKiK bez NIP generuje za dużo false positives)
         branch_checks = {}
         branches_to_check = company["oddzialy"][:5]  # max 5 oddziałów
         if branches_to_check:
