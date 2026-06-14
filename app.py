@@ -117,6 +117,8 @@ def generate():
         detected_nip = _is_nip(query)
         detected_krs = not detected_nip and _is_krs(query)
     company_name: str | None = None
+    nip_for_uokik: str = ""
+    regon_for_uokik: str = ""
 
     # NIP → pobierz nazwę firmy z VAT (potrzebna dla name-based modułów)
     if detected_nip and any(m in selected for m in NAME_MODULES):
@@ -124,6 +126,8 @@ def generate():
             vat_result = vat.run(query, "nip")
             if vat_result.get("status") == "ok":
                 company_name = _shorten_for_search(vat_result["data"].get("nazwa", ""))
+                nip_for_uokik = vat_result["data"].get("nip", "") or ""
+                regon_for_uokik = vat_result["data"].get("regon", "") or ""
             if "vat" in selected:
                 results["vat"] = vat_result
         except Exception as e:
@@ -145,6 +149,8 @@ def generate():
 
         if name in NAME_MODULES:
             if company_name:
+                if name == "uokik":
+                    return uokik.run(company_name, "name", nip=nip_for_uokik, regon=regon_for_uokik)
                 return MODULES[name]["fn"](company_name, "name")
             # Brak nazwy (zapytanie to KRS lub nieznana forma) — pomiń
             if detected_krs or detected_nip:
