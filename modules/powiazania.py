@@ -86,31 +86,15 @@ def _parse_company(dane: dict) -> dict:
     }
 
 
-def _check_entity_in_knf_uokik(name: str) -> dict:
-    """Sprawdza nazwę podmiotu w KNF i UOKiK."""
-    from modules import knf, uokik
-    results = {}
-
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        f_knf = ex.submit(knf.run, name, "name")
-        f_uokik = ex.submit(uokik.run, name, "name")
-
-        for future, key in [(f_knf, "knf"), (f_uokik, "uokik")]:
-            try:
-                r = future.result(timeout=45)
-                results[key] = {
-                    "status": r.get("status"),
-                    "count": len(r.get("data", {}).get("decisions", [])) if key == "uokik"
-                             else (1 if r.get("data", {}).get("warnings") else 0),
-                    "hit": r.get("status") == "ok" and bool(
-                        r.get("data", {}).get("warnings") if key == "knf"
-                        else r.get("data", {}).get("decisions")
-                    ),
-                }
-            except Exception as e:
-                results[key] = {"status": "error", "error": str(e), "hit": False, "count": 0}
-
-    return results
+def _check_entity_in_knf(name: str) -> dict:
+    """Sprawdza nazwę podmiotu w KNF (tylko KNF — UOKiK bez NIP generuje fałszywe trafienia)."""
+    from modules import knf
+    try:
+        r = knf.run(name, "name")
+        hit = r.get("status") == "ok" and bool(r.get("data", {}).get("warnings"))
+        return {"status": r.get("status"), "hit": hit}
+    except Exception as e:
+        return {"status": "error", "error": str(e), "hit": False}
 
 
 # ── Module interface ──────────────────────────────────────────────────────────
@@ -136,12 +120,12 @@ def run(query: str, query_type: str = "nip") -> dict:
         board = _parse_board(dane)
         company = _parse_company(dane)
 
-        # Sprawdz oddzialy w KNF/UOKiK (nazwy firm sa jawne)
+        # Sprawdz oddzialy w KNF (tylko KNF — UOKiK bez NIP generuje za dużo false positives)
         branch_checks = {}
         branches_to_check = company["oddzialy"][:5]  # max 5 oddziałów
         if branches_to_check:
             with ThreadPoolExecutor(max_workers=3) as ex:
-                futures = {ex.submit(_check_entity_in_knf_uokik, name): name for name in branches_to_check}
+                futures = {ex.submit(_check_entity_in_knf, name): name for name in branches_to_check}
                 for future in _as_completed(futures):
                     name = futures[future]
                     try:
@@ -156,7 +140,8 @@ def run(query: str, query_type: str = "nip") -> dict:
                 "forma_prawna": company["forma_prawna"],
                 "kapital_zakladowy": company["kapital_zakladowy"],
                 "board": board,
-                "oddzialy": company["oddzialy"],
+                "oddzialy_total": len(company["oddzialy"]),
+                "oddzialy_checked": branches_to_check,
                 "branch_checks": branch_checks,
                 "note": "Imiona i nazwiska członków zarządu są anonimizowane przez API KRS (RODO). "
                         "Widoczna jest struktura organów i liczba osób.",

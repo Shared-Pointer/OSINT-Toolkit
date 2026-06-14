@@ -14,6 +14,8 @@ def _normalize_domain(raw: str) -> str:
     raw = raw.strip().lower()
     raw = re.sub(r"https?://", "", raw)
     raw = re.sub(r"/.*", "", raw)
+    # Stripuj www. — SPF/DMARC są zawsze na domenie apex, nie na www
+    raw = re.sub(r"^www\.", "", raw)
     return raw
 
 

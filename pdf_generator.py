@@ -557,20 +557,20 @@ def _section_powiazania(result: dict, styles) -> list:
             ))
 
         # Oddziały
-        oddzialy = d.get("oddzialy", [])
-        if oddzialy:
+        oddzialy_checked = d.get("oddzialy_checked", [])
+        oddzialy_total = d.get("oddzialy_total", len(oddzialy_checked))
+        if oddzialy_checked:
+            label = f"Oddziały sprawdzone w KNF ({len(oddzialy_checked)} z {oddzialy_total})"
             content.append(Spacer(1, 10))
-            content.append(Paragraph(f"Oddziały / jednostki terenowe ({len(oddzialy)})", styles["section_title"]))
+            content.append(Paragraph(label, styles["section_title"]))
             content.append(Spacer(1, 4))
 
             branch_checks = d.get("branch_checks", {})
             branch_rows = []
-            for name in oddzialy:
+            for name in oddzialy_checked:
                 checks = branch_checks.get(name, {})
-                knf_hit = "⚠ KNF" if checks.get("knf", {}).get("hit") else ""
-                uokik_hit = f"UOKiK ({checks['uokik']['count']})" if checks.get("uokik", {}).get("hit") else ""
-                flags = " ".join(filter(None, [knf_hit, uokik_hit])) or "brak powiązań"
-                branch_rows.append((name[:70], flags))
+                flag = "⚠ UWAGA: figuruje na liście ostrzeżeń KNF" if checks.get("hit") else "brak powiązań KNF"
+                branch_rows.append((name[:70], flag))
 
             content.append(_data_table(branch_rows, styles))
 
