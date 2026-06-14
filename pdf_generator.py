@@ -57,8 +57,8 @@ def _register_fonts():
 
 
 _UNICODE_FONTS = _register_fonts()
-FONT_REGULAR = "UniFont" if _UNICODE_FONTS else FONT_REGULAR
-FONT_BOLD    = "UniFont-Bold" if _UNICODE_FONTS else FONT_BOLD
+FONT_REGULAR = "UniFont" if _UNICODE_FONTS else "Helvetica"
+FONT_BOLD    = "UniFont-Bold" if _UNICODE_FONTS else "Helvetica-Bold"
 FONT_ITALIC  = FONT_REGULAR  # no separate oblique variant
 
 

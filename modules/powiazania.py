@@ -91,7 +91,8 @@ def _check_entity_in_knf(name: str) -> dict:
     from modules import knf
     try:
         r = knf.run(name, "name")
-        hit = r.get("status") == "ok" and bool(r.get("data", {}).get("warnings"))
+        knf_data = r.get("data", {})
+        hit = r.get("status") == "ok" and bool(knf_data.get("matches") or knf_data.get("found"))
         return {"status": r.get("status"), "hit": hit}
     except Exception as e:
         return {"status": "error", "error": str(e), "hit": False}
