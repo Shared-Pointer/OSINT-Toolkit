@@ -23,7 +23,7 @@ def _get_all_warnings() -> list[dict]:
 
         data = []
         for table in page.query_selector_all("table.warning-list-table"):
-            for row in table.query_selector_all("tr.warning-row"):
+            for row in table.query_selector_all("tr"):
                 tds = row.query_selector_all("td")
                 if len(tds) == 6:
                     data.append({
@@ -36,8 +36,10 @@ def _get_all_warnings() -> list[dict]:
                     })
         browser.close()
 
-    _cache["data"] = data
-    _cache["ts"] = now
+    # don't cache empty results - page may not have loaded properly
+    if data:
+        _cache["data"] = data
+        _cache["ts"] = now
     return data
 
 
