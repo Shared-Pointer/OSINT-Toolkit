@@ -164,7 +164,8 @@ def _fetch_justjoinit(keyword: str) -> list[dict]:
     )
     data = resp.json().get("data", [])
 
-    # filter client-side to exact company
+    # JustJoin.it ignores the companyName param - filter client-side
+    # In practice this returns 0 results because the API returns unrelated companies
     offers = []
     for o in data:
         if kw_lower not in (o.get("companyName") or "").lower():
@@ -193,6 +194,8 @@ def _fetch_justjoinit(keyword: str) -> list[dict]:
 
 
 def _scrape_justjoinit(keyword: str) -> list[dict]:
+    # JustJoin.it API does not support filtering by employer - companyName param is ignored
+    # All attempts (REST API, Playwright) return unfiltered results or empty page
     return _fetch_justjoinit(keyword)
 
 
