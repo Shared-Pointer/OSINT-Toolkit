@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, send_file, redirect, url_for, flash
 
 from modules import vat, krs, knf, uokik, rekrutacje, whois_dns, powiazania
+from modules.scoring import calculate as score_calculate
 from pdf_generator import generate_pdf
 
 
@@ -154,7 +155,8 @@ def generate():
             except Exception as e:
                 results[name] = {"status": "error", "error": str(e), "data": {}}
 
-    pdf_bytes = generate_pdf(query, results, MODULES, selected)
+    scoring = score_calculate(results)
+    pdf_bytes = generate_pdf(query, results, MODULES, selected, scoring)
 
     return send_file(
         io.BytesIO(pdf_bytes),

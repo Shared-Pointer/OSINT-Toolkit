@@ -611,6 +611,7 @@ def generate_pdf(
     results: dict,
     modules_meta: dict,
     selected: list[str],
+    scoring: dict | None = None,
 ) -> bytes:
     buf = BytesIO()
     styles = _build_styles()
@@ -690,7 +691,55 @@ def generate_pdf(
         ("ROUNDEDCORNERS", (0,0), (-1,-1), [4,4,4,4]),
     ]))
     story.append(meta_t)
-    story.append(Spacer(1, 20))
+    story.append(Spacer(1, 16))
+
+    # ── Scoring ryzyka ────────────────────────────────────────────────────
+    if scoring:
+        sc = scoring["score"]
+        sc_color = colors.HexColor(scoring["color"])
+        sc_level = scoring["level"].upper()
+        reasons = scoring.get("reasons", [])
+
+        score_label = Paragraph(
+            f"Wskaźnik ryzyka: {sc}/100 — poziom {sc_level}",
+            ParagraphStyle("sc_title", parent=styles["body"],
+                           fontName=FONT_BOLD, fontSize=11,
+                           textColor=WHITE),
+        )
+        score_row = Table([[score_label]], colWidths=[W])
+        score_row.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, -1), sc_color),
+            ("TOPPADDING", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ("LEFTPADDING", (0, 0), (-1, -1), 14),
+            ("ROUNDEDCORNERS", (0, 0), (-1, -1), [6, 6, 6, 6]),
+        ]))
+        story.append(score_row)
+
+        if reasons:
+            reason_items = [
+                Paragraph(f"• {r}", ParagraphStyle(
+                    "ri", parent=styles["small"], textColor=sc_color,
+                    fontName=FONT_BOLD, spaceBefore=2))
+                for r in reasons
+            ]
+            reasons_box = Table([[item] for item in reason_items], colWidths=[W])
+            reasons_box.setStyle(TableStyle([
+                ("BOX", (0, 0), (-1, -1), 0.5, sc_color),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f7fafc")),
+            ]))
+            story.append(reasons_box)
+        else:
+            story.append(Paragraph(
+                "Brak czynników ryzyka wykrytych na podstawie dostępnych danych.",
+                ParagraphStyle("no_risk", parent=styles["small"], textColor=sc_color,
+                               fontName=FONT_BOLD, leftIndent=10),
+            ))
+
+        story.append(Spacer(1, 16))
 
     # ── Sekcje modułów ────────────────────────────────────────────────────
     for mod_key in selected:
