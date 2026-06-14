@@ -352,10 +352,9 @@ def _section_rekrutacje(result: dict, styles) -> list:
         # Statystyki per portal
         source_parts = []
         for src, stat in sources.items():
-            if stat.get("error"):
-                source_parts.append(f"{src}: błąd")
-            else:
-                source_parts.append(f"{src}: {stat['count']}")
+            cnt = stat.get("count", 0)
+            err = stat.get("error")
+            source_parts.append(f"{src}: {'błąd' if err else cnt}")
         source_summary = " · ".join(source_parts)
 
         flowables = [header, Spacer(1, 6)]
@@ -364,54 +363,83 @@ def _section_rekrutacje(result: dict, styles) -> list:
         if source_summary:
             flowables.append(Paragraph(source_summary, ParagraphStyle(
                 "src", parent=styles["small"], textColor=GRAY)))
-        flowables.append(Spacer(1, 8))
+        flowables.append(Spacer(1, 10))
 
-        # Tabela ofert z kolumną Źródło
-        SOURCE_SHORT = {"pracuj.pl": "PL", "nofluffjobs.com": "NFF", "justjoin.it": "JJ"}
-        table_data = [[
-            Paragraph("Stanowisko", styles["label"]),
-            Paragraph("Firma", styles["label"]),
-            Paragraph("Wynagrodzenie", styles["label"]),
-            Paragraph("Lokalizacja", styles["label"]),
-            Paragraph("Data", styles["label"]),
-            Paragraph("Portal", styles["label"]),
-        ]]
+        # Subsekcje per portal
+        SOURCE_ORDER = ["pracuj.pl", "nofluffjobs.com", "justjoin.it"]
+        SOURCE_LABEL = {
+            "pracuj.pl": "pracuj.pl",
+            "nofluffjobs.com": "NoFluffJobs",
+            "justjoin.it": "JustJoin.it",
+        }
 
-        for offer in offers:
-            locations_str = ", ".join(offer.get("locations", []))[:35]
-            salary = offer.get("salary") or "—"
-            date = offer.get("date", "")[:7]
-            src = SOURCE_SHORT.get(offer.get("source", ""), offer.get("source", "")[:3])
-            table_data.append([
-                Paragraph(offer.get("title", "")[:55], styles["value"]),
-                Paragraph(offer.get("company", "")[:30], styles["value"]),
-                Paragraph(salary[:28], styles["value"]),
-                Paragraph(locations_str, styles["value"]),
-                Paragraph(date, styles["value"]),
-                Paragraph(src, styles["value"]),
-            ])
+        col_widths = [5.5*cm, 3*cm, 3*cm, 3.5*cm, 1.3*cm]
 
-        col_widths = [5*cm, 3*cm, 2.8*cm, 2.8*cm, 1.6*cm, 1.1*cm]
-        offers_table = Table(table_data, colWidths=col_widths, repeatRows=1)
-        row_count = len(table_data)
-        style_cmds = [
-            ("BACKGROUND", (0, 0), (-1, 0), NAVY),
-            ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
-            ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
-            ("FONTSIZE", (0, 0), (-1, -1), 7.5),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ("LEFTPADDING", (0, 0), (-1, -1), 5),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-            ("LINEBELOW", (0, 0), (-1, 0), 0.5, BLUE),
-            ("LINEBELOW", (0, 1), (-1, -1), 0.3, colors.HexColor("#e2e8f0")),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ]
-        for i in range(2, row_count, 2):
-            style_cmds.append(("BACKGROUND", (0, i), (-1, i), LGRAY))
-        offers_table.setStyle(TableStyle(style_cmds))
-        flowables.append(offers_table)
-        flowables.append(Spacer(1, 14))
+        def _offers_table(offer_list):
+            tdata = [[
+                Paragraph("Stanowisko", styles["label"]),
+                Paragraph("Firma", styles["label"]),
+                Paragraph("Wynagrodzenie", styles["label"]),
+                Paragraph("Lokalizacja", styles["label"]),
+                Paragraph("Data", styles["label"]),
+            ]]
+            for offer in offer_list:
+                loc = ", ".join(offer.get("locations", []))[:40]
+                salary = offer.get("salary") or "—"
+                date = offer.get("date", "")[:7]
+                tdata.append([
+                    Paragraph(offer.get("title", "")[:60], styles["value"]),
+                    Paragraph(offer.get("company", "")[:30], styles["value"]),
+                    Paragraph(salary[:28], styles["value"]),
+                    Paragraph(loc, styles["value"]),
+                    Paragraph(date, styles["value"]),
+                ])
+            t = Table(tdata, colWidths=col_widths, repeatRows=1)
+            rc = len(tdata)
+            cmds = [
+                ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+                ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+                ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
+                ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.5, BLUE),
+                ("LINEBELOW", (0, 1), (-1, -1), 0.3, colors.HexColor("#e2e8f0")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+            for i in range(2, rc, 2):
+                cmds.append(("BACKGROUND", (0, i), (-1, i), LGRAY))
+            t.setStyle(TableStyle(cmds))
+            return t
+
+        for src in SOURCE_ORDER:
+            src_offers = [o for o in offers if o.get("source") == src]
+            stat = sources.get(src, {})
+            label = SOURCE_LABEL.get(src, src)
+
+            flowables.append(Paragraph(
+                label,
+                ParagraphStyle("src_hdr", parent=styles["section_title"],
+                               fontSize=9, textColor=NAVY, spaceAfter=4),
+            ))
+
+            if stat.get("error"):
+                flowables.append(Paragraph(
+                    f"Błąd: {stat['error']}",
+                    ParagraphStyle("e", parent=styles["small"], textColor=RED),
+                ))
+            elif not src_offers:
+                flowables.append(Paragraph(
+                    "Brak ofert.",
+                    ParagraphStyle("nb", parent=styles["small"], textColor=GRAY),
+                ))
+            else:
+                flowables.append(_offers_table(src_offers))
+
+            flowables.append(Spacer(1, 10))
+
         return flowables
 
     elif status == "not_found":

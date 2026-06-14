@@ -109,38 +109,18 @@ def _scrape_nofluffjobs(keyword: str) -> list[dict]:
         except Exception:
             pass
         try:
-            page.wait_for_selector("nfj-posting-item, .posting-list-item, [class*='posting']", timeout=15000)
+            page.wait_for_selector("a.posting-list-item", timeout=15000)
         except Exception:
             pass
 
         offers = page.evaluate("""() => {
             const results = [];
-            const seen = new Set();
-
-            // NFF Angular custom elements
-            document.querySelectorAll('nfj-posting-item').forEach(item => {
-                const link = item.querySelector('a[href*="/praca/"]');
-                if (!link || seen.has(link.href)) return;
-                seen.add(link.href);
-                const title = item.querySelector('[class*="title"], [class*="position"]')?.textContent?.trim() || link.textContent?.trim() || '';
-                const company = item.querySelector('[class*="company"], [class*="employer"]')?.textContent?.trim() || '';
-                const loc = item.querySelector('[class*="location"], [class*="city"]')?.textContent?.trim() || '';
-                const salary = item.querySelector('[class*="salary"]')?.textContent?.trim() || null;
-                if (title) results.push({title, company, location: loc, salary, url: link.href});
+            document.querySelectorAll('a.posting-list-item').forEach(a => {
+                const title = a.querySelector('[data-cy="title position on the job offer listing"]')?.textContent?.trim() || '';
+                const salary = a.querySelector('[data-cy="salary ranges on the job offer listing"]')?.textContent?.trim() || null;
+                const loc = a.querySelector('[data-cy="location on the job offer listing"]')?.textContent?.trim() || '';
+                if (title) results.push({title, salary, location: loc, url: a.href});
             });
-
-            // Fallback: generic posting links
-            if (results.length === 0) {
-                document.querySelectorAll('a[href*="nofluffjobs.com/praca/"]').forEach(a => {
-                    if (seen.has(a.href)) return;
-                    seen.add(a.href);
-                    const card = a.closest('li, article, [class*="item"], [class*="card"]') || a;
-                    const title = card.querySelector('h3, h4, [class*="title"]')?.textContent?.trim() || a.textContent?.trim() || '';
-                    const company = card.querySelector('[class*="company"]')?.textContent?.trim() || '';
-                    const loc = card.querySelector('[class*="location"], [class*="city"]')?.textContent?.trim() || '';
-                    if (title && title.length > 3) results.push({title, company, location: loc, salary: null, url: a.href});
-                });
-            }
             return results;
         }""")
 
@@ -148,79 +128,74 @@ def _scrape_nofluffjobs(keyword: str) -> list[dict]:
 
     for o in offers:
         o["source"] = "nofluffjobs.com"
-        o.setdefault("locations", [o.pop("location", "") or "—"])
+        o["company"] = keyword
+        o["locations"] = [o.pop("location", "") or "—"]
         o.setdefault("date", "")
     return offers
 
 
 # ── JustJoin.it ───────────────────────────────────────────────────────────────
 
-def _scrape_justjoinit(keyword: str) -> list[dict]:
-    from playwright.sync_api import sync_playwright
+def _fetch_justjoinit(keyword: str) -> list[dict]:
+    """REST API JustJoin.it — bez Playwright."""
+    import requests as _req
 
-    url = f"https://justjoin.it/job-offers/all-locations/all-categories?keyword={quote(keyword)}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "application/json",
+    }
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        ctx = browser.new_context(
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            locale="pl-PL",
-        )
-        page = ctx.new_page()
-        page.goto(url, timeout=30000)
-        try:
-            page.click('button:has-text("Akceptuj")', timeout=3000)
-        except Exception:
-            pass
+    # Znajdz dokladna nazwe firmy przez suggest
+    suggest = _req.get(
+        f"https://justjoin.it/api/candidate-api/offers/suggest?search={quote(keyword)}&keywordType=any",
+        headers=headers, timeout=10,
+    ).json()
+    companies = suggest.get("companies", [])
 
-        # Czekaj na listę ofert
-        try:
-            page.wait_for_selector('[data-index], article[class*="offer"], [class*="OfferCard"]', timeout=15000)
-        except Exception:
-            pass
+    # Wybierz firme ktora najlepiej pasuje do keyword (case-insensitive contains)
+    kw_lower = keyword.lower()
+    matched_company = next(
+        (c for c in companies if kw_lower in c.lower()),
+        keyword,
+    )
 
-        # Scrolluj żeby załadować więcej
-        for _ in range(3):
-            page.evaluate("window.scrollBy(0, window.innerHeight)")
-            time.sleep(0.6)
+    # Pobierz oferty filtrowane po nazwie firmy
+    resp = _req.get(
+        f"https://justjoin.it/api/candidate-api/offers?companyName={quote(matched_company)}&pageSize=50",
+        headers=headers, timeout=15,
+    )
+    data = resp.json().get("data", [])
 
-        offers = page.evaluate("""() => {
-            const results = [];
-            const seen = new Set();
+    # Filtruj client-side — tylko oferty tej firmy
+    offers = []
+    for o in data:
+        if kw_lower not in (o.get("companyName") or "").lower():
+            continue
+        salary = None
+        emp_types = o.get("employmentTypes", [])
+        if emp_types:
+            et = emp_types[0]
+            lo = et.get("salaryFrom")
+            hi = et.get("salaryTo")
+            cur = et.get("currency", "PLN")
+            if lo and hi:
+                salary = f"{lo:,}–{hi:,} {cur}".replace(",", " ")
 
-            // JustJoin virtual list items
-            const containers = [
-                ...document.querySelectorAll('[data-index]'),
-                ...document.querySelectorAll('article'),
-                ...document.querySelectorAll('[class*="OfferCard"], [class*="offer-card"]'),
-            ];
+        offers.append({
+            "title": o.get("title", ""),
+            "company": o.get("companyName", ""),
+            "salary": salary,
+            "locations": [o.get("city") or "—"],
+            "date": (o.get("publishedAt") or "")[:10],
+            "url": f"https://justjoin.it/job-offers/{o.get('slug', '')}",
+            "source": "justjoin.it",
+        })
 
-            containers.forEach(container => {
-                const link = container.querySelector('a[href*="/job-offer/"]') || container.querySelector('a[href]');
-                const href = link?.href || '';
-                if (!href || seen.has(href)) return;
-                seen.add(href);
-
-                const title = container.querySelector('h2, h3, [class*="Title"], [class*="title"]')?.textContent?.trim() || '';
-                const company = container.querySelector('[class*="Company"], [class*="company"], [class*="employer"]')?.textContent?.trim() || '';
-                const loc = container.querySelector('[class*="City"], [class*="city"], [class*="location"]')?.textContent?.trim() || '';
-                const salary = container.querySelector('[class*="Salary"], [class*="salary"]')?.textContent?.trim() || null;
-
-                if (title && title.length > 3) {
-                    results.push({title, company, location: loc, salary, url: href});
-                }
-            });
-            return results;
-        }""")
-
-        browser.close()
-
-    for o in offers:
-        o["source"] = "justjoin.it"
-        o.setdefault("locations", [o.pop("location", "") or "—"])
-        o.setdefault("date", "")
     return offers
+
+
+def _scrape_justjoinit(keyword: str) -> list[dict]:
+    return _fetch_justjoinit(keyword)
 
 
 # ── Module interface ──────────────────────────────────────────────────────────
