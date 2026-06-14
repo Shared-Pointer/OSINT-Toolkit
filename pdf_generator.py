@@ -338,91 +338,108 @@ def _section_uokik(result: dict, styles) -> list:
 
 def _section_rekrutacje(result: dict, styles) -> list:
     status = result.get("status", "error")
-    header = _header_row("Rekrutacje — Aktywne Oferty Pracy (pracuj.pl)", status, "[HR]", styles)
+    header = _header_row("Rekrutacje — Aktywne Oferty Pracy", status, "[HR]", styles)
     d = result.get("data", {})
 
     if status == "ok" and d:
         offers = d.get("offers", [])
         total = d.get("total_count", len(offers))
-        days_back = d.get("days_back", 30)
         query_used = d.get("query_used", "")
+        sources = d.get("sources", {})
 
-        summary_text = f"Znaleziono {total} ofert pracy za ostatnie {days_back} dni"
-        if total > len(offers):
-            summary_text += f" — pokazano pierwszych {len(offers)}"
-        summary_text += f" (zapytanie: \"{query_used}\")"
+        summary_text = f"Znaleziono {total} ofert pracy (zapytanie: \"{query_used}\")"
 
-        content = [
-            Spacer(1, 6),
-            Paragraph(summary_text, ParagraphStyle("sum", parent=styles["body"],
-                textColor=BLUE, fontName=FONT_BOLD)),
-            Spacer(1, 10),
-        ]
+        # Statystyki per portal
+        source_parts = []
+        for src, stat in sources.items():
+            cnt = stat.get("count", 0)
+            err = stat.get("error")
+            source_parts.append(f"{src}: {'błąd' if err else cnt}")
+        source_summary = " · ".join(source_parts)
 
-        if total > len(offers):
-            content.append(Paragraph(
-                f"ℹ Pracuj.pl udostępnia maks. 50 wyników bez logowania. "
-                f"Pozostałe {total - len(offers)} ofert dostępne na stronie.",
-                ParagraphStyle("note", parent=styles["small"], textColor=GRAY,
-                    fontName=FONT_ITALIC),
-            ))
-            content.append(Spacer(1, 8))
+        flowables = [header, Spacer(1, 6)]
+        flowables.append(Paragraph(summary_text, ParagraphStyle(
+            "sum", parent=styles["body"], textColor=BLUE, fontName=FONT_BOLD)))
+        if source_summary:
+            flowables.append(Paragraph(source_summary, ParagraphStyle(
+                "src", parent=styles["small"], textColor=GRAY)))
+        flowables.append(Spacer(1, 10))
 
-        # Tabela ofert
-        table_data = [[
-            Paragraph("Stanowisko", styles["label"]),
-            Paragraph("Firma", styles["label"]),
-            Paragraph("Wynagrodzenie", styles["label"]),
-            Paragraph("Lokalizacja", styles["label"]),
-            Paragraph("Data", styles["label"]),
-        ]]
+        # Subsekcje per portal
+        SOURCE_ORDER = ["pracuj.pl", "nofluffjobs.com", "justjoin.it"]
+        SOURCE_LABEL = {
+            "pracuj.pl": "pracuj.pl",
+            "nofluffjobs.com": "NoFluffJobs",
+            "justjoin.it": "JustJoin.it",
+        }
 
-        for offer in offers:
-            locations_str = ", ".join(offer.get("locations", []))[:40]
-            salary = offer.get("salary") or "—"
-            date = offer.get("date", "")[:7]  # YYYY-MM
-            table_data.append([
-                Paragraph(offer.get("title", "")[:60], styles["value"]),
-                Paragraph(offer.get("company", "")[:35], styles["value"]),
-                Paragraph(salary[:30], styles["value"]),
-                Paragraph(locations_str, styles["value"]),
-                Paragraph(date, styles["value"]),
-            ])
+        col_widths = [5.5*cm, 3*cm, 3*cm, 3.5*cm, 1.3*cm]
 
-        col_widths = [5.5*cm, 3.5*cm, 3*cm, 3*cm, 1.8*cm]
-        offers_table = Table(table_data, colWidths=col_widths, repeatRows=1)
-        row_count = len(table_data)
-        style_cmds = [
-            ("BACKGROUND", (0, 0), (-1, 0), NAVY),
-            ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
-            ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-            ("LINEBELOW", (0, 0), (-1, 0), 0.5, BLUE),
-            ("LINEBELOW", (0, 1), (-1, -1), 0.3, colors.HexColor("#e2e8f0")),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ]
-        for i in range(2, row_count, 2):
-            style_cmds.append(("BACKGROUND", (0, i), (-1, i), LGRAY))
-        offers_table.setStyle(TableStyle(style_cmds))
-        # Tabela może być wielostronicowa — zwracamy ją poza section_box
-        flowables = [header]
-        flowables += [Spacer(1, 6),
-                      Paragraph(summary_text, ParagraphStyle("sum", parent=styles["body"],
-                          textColor=BLUE, fontName=FONT_BOLD)),
-                      Spacer(1, 6)]
-        if total > len(offers):
+        def _offers_table(offer_list):
+            tdata = [[
+                Paragraph("Stanowisko", styles["label"]),
+                Paragraph("Firma", styles["label"]),
+                Paragraph("Wynagrodzenie", styles["label"]),
+                Paragraph("Lokalizacja", styles["label"]),
+                Paragraph("Data", styles["label"]),
+            ]]
+            for offer in offer_list:
+                loc = ", ".join(offer.get("locations", []))[:40]
+                salary = offer.get("salary") or "—"
+                date = offer.get("date", "")[:7]
+                tdata.append([
+                    Paragraph(offer.get("title", "")[:60], styles["value"]),
+                    Paragraph(offer.get("company", "")[:30], styles["value"]),
+                    Paragraph(salary[:28], styles["value"]),
+                    Paragraph(loc, styles["value"]),
+                    Paragraph(date, styles["value"]),
+                ])
+            t = Table(tdata, colWidths=col_widths, repeatRows=1)
+            rc = len(tdata)
+            cmds = [
+                ("BACKGROUND", (0, 0), (-1, 0), NAVY),
+                ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+                ("FONTNAME", (0, 0), (-1, 0), FONT_BOLD),
+                ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.5, BLUE),
+                ("LINEBELOW", (0, 1), (-1, -1), 0.3, colors.HexColor("#e2e8f0")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ]
+            for i in range(2, rc, 2):
+                cmds.append(("BACKGROUND", (0, i), (-1, i), LGRAY))
+            t.setStyle(TableStyle(cmds))
+            return t
+
+        for src in SOURCE_ORDER:
+            src_offers = [o for o in offers if o.get("source") == src]
+            stat = sources.get(src, {})
+            label = SOURCE_LABEL.get(src, src)
+
             flowables.append(Paragraph(
-                f"ℹ Pracuj.pl udostępnia maks. 50 wyników bez logowania. "
-                f"Pozostałe {total - len(offers)} ofert dostępne na stronie.",
-                ParagraphStyle("note", parent=styles["small"], textColor=GRAY,
-                    fontName=FONT_ITALIC)))
-            flowables.append(Spacer(1, 6))
-        flowables.append(offers_table)
-        flowables.append(Spacer(1, 14))
+                label,
+                ParagraphStyle("src_hdr", parent=styles["section_title"],
+                               fontSize=9, textColor=NAVY, spaceAfter=4),
+            ))
+
+            if stat.get("error"):
+                flowables.append(Paragraph(
+                    f"Błąd: {stat['error']}",
+                    ParagraphStyle("e", parent=styles["small"], textColor=RED),
+                ))
+            elif not src_offers:
+                flowables.append(Paragraph(
+                    "Brak ofert.",
+                    ParagraphStyle("nb", parent=styles["small"], textColor=GRAY),
+                ))
+            else:
+                flowables.append(_offers_table(src_offers))
+
+            flowables.append(Spacer(1, 10))
+
         return flowables
 
     elif status == "not_found":
