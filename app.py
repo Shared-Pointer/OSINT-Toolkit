@@ -59,7 +59,7 @@ MODULES = {
     },
     "rekrutacje": {
         "name": "Rekrutacje",
-        "desc": "Aktywne oferty pracy firmy (pracuj.pl)",
+        "desc": "Aktywne oferty pracy firmy (pracuj.pl, NoFluffJobs, JustJoin.it)",
         "icon": "💼",
         "fn": rekrutacje.run,
     },
